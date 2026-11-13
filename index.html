@@ -1,0 +1,2445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>THE NEXT LEVEL — KamiLimu Effect Escape Room</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; user-select: none; }
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      overflow: hidden; background: #140f1d;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      color: #f8fafc;
+    }
+    h1, h2, h3, .font-display { font-family: 'Fredoka', sans-serif; }
+    textarea, input { user-select: text; }
+    #webgl-container {
+      position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1;
+    }
+    .hud-glass {
+      background: rgba(24, 18, 38, 0.78);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1.5px solid rgba(196, 167, 231, 0.35);
+      box-shadow: 0 10px 30px rgba(8, 5, 16, 0.45);
+    }
+    .modal-card {
+      background: linear-gradient(180deg, #211834 0%, #161024 100%);
+      border: 2px solid rgba(216, 180, 254, 0.45);
+      box-shadow: 0 24px 60px rgba(5, 3, 12, 0.75);
+      color: #f8fafc;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #f59e0b 0%, #ec4899 100%);
+      border: 1.5px solid rgba(255, 255, 255, 0.35);
+      box-shadow: 0 8px 24px rgba(236, 72, 153, 0.38);
+      color: #ffffff;
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+    .btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(1px); }
+    .btn-secondary {
+      background: rgba(46, 35, 71, 0.85);
+      border: 1.5px solid rgba(196, 167, 231, 0.35);
+      color: #f1e8ff;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .btn-secondary:hover {
+      background: rgba(67, 51, 102, 0.95);
+      border-color: rgba(245, 158, 11, 0.65);
+    }
+    @keyframes floatPrompt {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+    .prompt-bob { animation: floatPrompt 1.6s infinite ease-in-out; }
+  </style>
+</head>
+<body>
+  <!-- Fullscreen 3D World Viewport -->
+  <div id="webgl-container"></div>
+
+  <!-- CLEAN GAME OPENING OVERLAY (Over live 3D room camera) -->
+  <div id="title-overlay" class="fixed inset-0 z-30 flex flex-col justify-between p-6 sm:p-10 bg-gradient-to-t from-[#120c1e]/90 via-[#120c1e]/35 to-[#120c1e]/60">
+    <div class="flex items-center justify-between">
+      <span class="px-3.5 py-1.5 rounded-full hud-glass text-xs font-bold tracking-widest uppercase text-amber-300">
+        KAMILIMU EFFECT ESCAPE ROOM
+      </span>
+      <button id="btn-title-photos" type="button" class="btn-secondary px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer">
+        Attach Room Photos
+      </button>
+    </div>
+
+    <div class="max-w-xl space-y-5 my-auto">
+      <h1 class="text-5xl sm:text-7xl font-bold tracking-tight text-white drop-shadow-[0_6px_24px_rgba(0,0,0,0.65)]">
+        THE NEXT LEVEL
+      </h1>
+      <p class="text-lg sm:text-xl text-purple-100/90 font-medium">
+        KamiLimu Effect Escape Room
+      </p>
+      <div class="pt-2 flex flex-wrap items-center gap-3.5">
+        <button id="btn-start-game" type="button" class="btn-primary px-9 py-4 rounded-2xl font-display font-bold text-xl tracking-wide cursor-pointer">
+          PLAY
+        </button>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3 text-xs text-purple-200/80">
+      <span class="px-3 py-1.5 rounded-lg hud-glass"><strong>WASD / Arrows</strong> Move</span>
+      <span class="px-3 py-1.5 rounded-lg hud-glass"><strong>Mouse Drag</strong> Orbit Camera</span>
+      <span class="px-3 py-1.5 rounded-lg hud-glass"><strong>E</strong> Interact</span>
+      <span class="px-3 py-1.5 rounded-lg hud-glass"><strong>Shift</strong> Sprint</span>
+    </div>
+  </div>
+
+  <!-- MINIMAL IN-GAME HUD (Inspired by Cozy Memory Hunt reference layout) -->
+  <div id="game-hud" class="fixed inset-0 z-20 pointer-events-none hidden flex-col justify-between p-4 sm:p-5">
+    <!-- Top Row -->
+    <div class="flex items-start justify-between gap-3">
+      <!-- Top-Left: Current Objective -->
+      <div class="pointer-events-auto hud-glass rounded-2xl px-4 py-3 max-w-sm flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-purple-500/25 border border-purple-300/40 flex items-center justify-center text-amber-300 font-bold shrink-0">
+          ✦
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span id="hud-room-label" class="text-[11px] font-bold uppercase tracking-wider text-amber-300">Room 1 • Current Objective:</span>
+          </div>
+          <p id="hud-objective-text" class="text-xs sm:text-sm text-white font-medium mt-0.5 leading-snug">
+            Explore the room and find the scattered memory fragments.
+          </p>
+        </div>
+      </div>
+
+      <!-- Top-Right: Memory Fragment Counter + Pause -->
+      <div class="pointer-events-auto flex items-center gap-2.5">
+        <div class="hud-glass rounded-2xl px-4 py-2.5 flex items-center gap-2">
+          <span class="text-purple-300 text-base">🧩</span>
+          <span id="hud-fragment-count" class="font-display font-bold text-base text-white">0 / 5</span>
+        </div>
+        <button id="btn-hud-hint" type="button" class="hud-glass hover:border-amber-300/60 rounded-2xl px-3.5 py-2.5 text-xs font-bold text-amber-200 cursor-pointer" title="Get a Clue [H]">
+          Clue
+        </button>
+        <button id="btn-hud-pause" type="button" class="hud-glass hover:border-purple-300/60 rounded-2xl w-11 h-11 flex items-center justify-center text-white font-bold cursor-pointer" title="Pause & Rooms [ESC]">
+          ❚❚
+        </button>
+      </div>
+    </div>
+
+    <!-- Center-Bottom: Contextual Interaction Prompt & Subtle Story Line -->
+    <div class="flex flex-col items-center gap-2.5 w-full max-w-2xl mx-auto">
+      <div id="interact-prompt" class="hidden pointer-events-auto prompt-bob">
+        <button id="btn-interact" type="button" class="btn-primary px-5 py-2.5 rounded-2xl font-display font-bold text-sm flex items-center gap-2.5 cursor-pointer">
+          <span class="px-2 py-0.5 rounded-md bg-white text-purple-950 text-xs font-extrabold">E</span>
+          <span id="interact-prompt-label">Examine</span>
+        </button>
+      </div>
+
+      <div id="subtitle-bar" class="pointer-events-auto hud-glass rounded-2xl px-4 py-2.5 text-center w-full transition-opacity duration-500">
+        <p id="subtitle-text" class="text-xs sm:text-sm text-purple-100 font-medium leading-snug">
+          You wake up in a warm, sunlit room. Walk around the desk, bookshelf, and pinboard to uncover what is hidden here.
+        </p>
+      </div>
+    </div>
+
+    <!-- Bottom Row: Compact Controls Legend (Left) & Inventory Bag Button (Right) -->
+    <div class="flex items-end justify-between gap-3">
+      <div class="hidden sm:flex hud-glass rounded-2xl px-3.5 py-2.5 flex-col gap-1 text-[11px] text-purple-200/90">
+        <div><span class="px-1.5 py-0.5 rounded bg-white/10 font-bold text-white mr-1.5">WASD</span> Move</div>
+        <div><span class="px-1.5 py-0.5 rounded bg-white/10 font-bold text-white mr-1.5">E</span> Interact &nbsp; <span class="px-1.5 py-0.5 rounded bg-white/10 font-bold text-white mr-1">Shift</span> Sprint</div>
+      </div>
+
+      <button id="btn-inventory" type="button" class="pointer-events-auto hud-glass hover:border-amber-300/60 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 cursor-pointer ml-auto">
+        <span class="text-lg">🎒</span>
+        <div class="text-left">
+          <span class="block text-xs font-bold text-white">Inventory</span>
+          <span id="hud-inv-count" class="block text-[10px] text-purple-300">0 items</span>
+        </div>
+      </button>
+    </div>
+  </div>
+
+  <!-- INTERACTIVE PUZZLE / OBJECT INSPECTION MODAL -->
+  <div id="game-modal" class="fixed inset-0 z-40 hidden items-center justify-center p-4 bg-[#090612]/75 backdrop-blur-sm">
+    <div class="modal-card max-w-2xl w-full max-h-[88vh] flex flex-col rounded-3xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-purple-300/20 flex items-center justify-between gap-3 bg-white/5">
+        <div>
+          <span id="modal-tag" class="text-[11px] font-bold uppercase tracking-widest text-amber-300">CLUE</span>
+          <h3 id="modal-title" class="font-display text-xl font-bold text-white">Inspecting</h3>
+        </div>
+        <button id="btn-close-modal" type="button" class="btn-secondary px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer">
+          Close [ESC]
+        </button>
+      </div>
+      <div id="modal-body" class="p-6 overflow-y-auto space-y-4 text-sm text-purple-100"></div>
+    </div>
+  </div>
+
+  <!-- PAUSE & PRESENTER ROOM SELECTOR -->
+  <div id="pause-modal" class="fixed inset-0 z-40 hidden items-center justify-center p-4 bg-[#090612]/80 backdrop-blur-md">
+    <div class="modal-card max-w-md w-full rounded-3xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-[11px] font-bold uppercase tracking-widest text-amber-300">PAUSED</span>
+          <h2 class="font-display text-2xl font-bold text-white">THE NEXT LEVEL</h2>
+        </div>
+        <button id="btn-resume-top" type="button" class="btn-secondary px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer">
+          Resume
+        </button>
+      </div>
+
+      <div class="p-3.5 rounded-2xl bg-white/5 border border-purple-300/20 space-y-2">
+        <p class="text-[11px] font-bold uppercase tracking-wider text-purple-300">
+          Presenter Room Jump
+        </p>
+        <div class="grid grid-cols-1 gap-1.5">
+          <button data-jump="1" type="button" class="btn-secondary text-left px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer">
+            Room 1: The Beginning (Creative Study Room)
+          </button>
+          <button data-jump="2" type="button" class="btn-secondary text-left px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer">
+            Room 2: The Awakening (Responsible Computing Lab)
+          </button>
+          <button data-jump="3" type="button" class="btn-secondary text-left px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer">
+            Room 3: The People (Communal Library)
+          </button>
+          <button data-jump="4" type="button" class="btn-secondary text-left px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer">
+            Room 4: The Growth Room (Exhibition &amp; Feedback)
+          </button>
+          <button data-jump="5" type="button" class="btn-secondary text-left px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer">
+            Room 5: The Future (Sunlit Memory Hall)
+          </button>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <button id="btn-resume-main" type="button" class="btn-primary w-full py-3 rounded-2xl font-display font-bold text-base cursor-pointer">
+          Continue Game
+        </button>
+        <button id="btn-pause-photos" type="button" class="btn-secondary w-full py-2.5 rounded-2xl text-xs font-bold cursor-pointer">
+          Attach / Edit Room Photographs
+        </button>
+        <button id="btn-pause-export" type="button" class="btn-secondary w-full py-2.5 rounded-2xl text-xs font-bold text-amber-200 border-amber-300/40 cursor-pointer">
+          Export Presentation HTML (Bake All Photos &amp; Edits)
+        </button>
+        <button id="btn-pause-sound" type="button" class="btn-secondary w-full py-2.5 rounded-2xl text-xs font-bold cursor-pointer">
+          Audio: Enabled
+        </button>
+        <button id="btn-pause-restart" type="button" class="w-full py-2 rounded-xl border border-rose-400/40 text-rose-300 hover:bg-rose-500/15 text-xs font-bold cursor-pointer">
+          Restart Game (Keeps Photos &amp; Reflections)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      /**
+       * =======================================================================
+       * 1. PERSISTENT GAME CONFIGURATION & STATE
+       * =======================================================================
+       */
+      const STORAGE_KEY = 'the_next_level_3d_kamilimu_v1';
+
+      // Hardcode your image paths inside the `images/` folder right here
+      // (or upload them in-game and click "Export Presentation HTML" in the Pause menu):
+      const DEFAULT_DATA = {
+        photos: {
+          r1_pinboard: { title: 'Before KamiLimu — Starting Out', caption: 'Stepping into technology with questions, curiosity, and room to grow.', url: 'images/r1-pinboard.jpg' },
+          r2_session: { title: 'Responsible Computing Session', caption: 'Learning to ask why an approach was chosen—not just whether the code runs.', url: 'images/r2-session.jpg' },
+          r3_mentees: { title: 'Fellow Mentees & Data Science Track', caption: 'Growing alongside fellow mentees and peers in the Data Science track.', url: 'images/r3-mentees.jpg' },
+          r3_mentors: { title: 'Mentors & KamiLimu Community', caption: 'Supported by ICT mentors, my peer mentor, the current Fellow, and the wider KamiLimu community.', url: 'images/r3-mentors.jpg' },
+          r4_recover: { title: 'Developing ReCover', caption: 'Turning structured problem-solving into a purposeful project.', url: 'images/r4-recover.jpg' },
+          r4_speech: { title: 'Speech Performance & Mum Witnessing My Growth', caption: 'Delivering a speech before an audience—and my mum witnessing a side of me she had not seen before outside the programme.', url: 'images/r4-speech.jpg' }
+        },
+        feedback: {
+          received: 'Strengthen how clearly I structure and explain my technical decisions and project impact.',
+          strengths: 'Curiosity, openness to constructive feedback, persistence, and steady growth in confidence.',
+          improve: 'Articulating engineering trade-offs concisely and highlighting measurable project outcomes.',
+          learned: 'Feedback becomes meaningful when I reflect on it honestly and turn it into consistent habits.',
+          actions: '1. Explain why I chose specific technical approaches.\n2. Communicate ReCover and its real-world impact clearly.\n3. Keep refining my CV and professional applications.\n4. Actively seek and apply feedback in future opportunities.'
+        },
+        // =========================================================================
+        // ROOM 3: THE PEOPLE (CONNECTIONS) — HARDCODE TITLES, DESCRIPTIONS & PHOTOS
+        // Edit `title`, `desc`, and `url` below so they appear automatically for everyone:
+        // =========================================================================
+        room3Keepsakes: {
+          c_mentees: {
+            title: 'Fellow Mentees',
+            desc: 'MY DAY ONES FR!! ',
+            url: 'images/ks-mentees.jpg'
+          },
+          c_dstrack: {
+            title: 'Data Science Track',
+            desc: 'Met amazing data scientists who have really helped me grow.Worked with amazing team members.',
+            url: 'images/ks-dstrack.jpg'
+          },
+          c_ict: {
+            title: 'ICT Mentors',
+            desc: 'Guidance from experienced mentors who challenged my thinking.',
+            url: 'images/ks-ict.jpg'
+          },
+          c_peer: {
+            title: 'My Peer Mentor',
+            desc: 'ELAINE! Best peer mentor ever. Found a forever friend and such a well of wisdom.',
+            url: 'images/ks-peer.jpg'
+          },
+          c_fellow: {
+            title: 'The Current Fellow',
+            desc: 'Bridgette has been such a guiding hand these 8 months. Very grateful for Bridgette.',
+            url: 'images/ks-fellow.jpg'
+          },
+          c_wider: {
+            title: 'Wider KamiLimu Community',
+            desc: 'A welcoming safe space where self-doubt gives way to belonging.',
+            url: 'images/ks-wider.jpg'
+          }
+        },
+        letter: `Dear Future Me,
+
+I hope you never forget the version of yourself who walked into this journey unsure of what she was capable of.
+I hope you remember the moments that challenged you, the people who encouraged you, the questions that changed how you think, and the opportunities that helped you see yourself differently.
+I hope you keep asking why, keep learning, keep building, and keep showing up.
+Most importantly, I hope you never return to believing that you do not belong in spaces you have worked so hard to enter.
+
+Because of KamiLimu, I see my potential and I am acting on it.
+I see growth. I have found a safe space and community.
+And I belong.
+
+With courage,
+Me.`
+      };
+
+      function loadData() {
+        try {
+          const defaultSig = JSON.stringify(DEFAULT_DATA);
+          const savedSig = localStorage.getItem(STORAGE_KEY + '_sig');
+          // If DEFAULT_DATA was edited in code, automatically use the new hardcoded values!
+          if (savedSig !== defaultSig) {
+            localStorage.setItem(STORAGE_KEY + '_sig', defaultSig);
+            localStorage.removeItem(STORAGE_KEY + '_data');
+            return JSON.parse(defaultSig);
+          }
+          const raw = localStorage.getItem(STORAGE_KEY + '_data');
+          if (!raw) return JSON.parse(defaultSig);
+          const p = JSON.parse(raw);
+          const mergedKeepsakes = {};
+          Object.keys(DEFAULT_DATA.room3Keepsakes).forEach((k) => {
+            mergedKeepsakes[k] = { ...DEFAULT_DATA.room3Keepsakes[k], ...(p.room3Keepsakes?.[k] || {}) };
+          });
+          return {
+            photos: { ...DEFAULT_DATA.photos, ...(p.photos || {}) },
+            feedback: { ...DEFAULT_DATA.feedback, ...(p.feedback || {}) },
+            room3Keepsakes: mergedKeepsakes,
+            letter: p.letter || DEFAULT_DATA.letter
+          };
+        } catch (e) {
+          return JSON.parse(JSON.stringify(DEFAULT_DATA));
+        }
+      }
+
+      function loadProgress() {
+        const fresh = {
+          started: false,
+          inventory: [],
+          r1NotebookRead: false,
+          r1ShelfRead: false,
+          r1DrawerOpen: false,
+          r1Fragments: [],
+          r1Solved: false,
+          door12Open: false,
+          r2BooksRead: false,
+          r2BoardRead: false,
+          r2Solved: false,
+          door23Open: false,
+          r3Clues: [],
+          r3Solved: false,
+          door34Open: false,
+          r4PodiumRead: false,
+          r4CabinetUnlocked: false,
+          r4TimelineDone: false,
+          r4FeedbackSaved: false,
+          r4Solved: false,
+          door45Open: false,
+          r5StarsPlaced: [],
+          r5Solved: false,
+          hintIdx: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+        };
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY + '_prog');
+          if (!raw) return fresh;
+          const p = JSON.parse(raw);
+          return {
+            ...fresh,
+            ...p,
+            inventory: Array.isArray(p.inventory) ? p.inventory : [],
+            r1Fragments: Array.isArray(p.r1Fragments) ? p.r1Fragments : [],
+            r3Clues: Array.isArray(p.r3Clues) ? p.r3Clues : [],
+            r5StarsPlaced: Array.isArray(p.r5StarsPlaced) ? p.r5StarsPlaced : [],
+            hintIdx: { ...fresh.hintIdx, ...(p.hintIdx || {}) }
+          };
+        } catch (e) {
+          return fresh;
+        }
+      }
+
+      function loadImageWithFallback(url, onSuccess, onFail) {
+        if (!url) { onFail(); return; }
+        if (url.startsWith('data:')) {
+          const img = new Image();
+          img.onload = () => onSuccess(img, url);
+          img.onerror = onFail;
+          img.src = url;
+          return;
+        }
+        const base = url.replace(/\.(jpg|jpeg|png|webp)$/i, '');
+        const candidates = [url, `${base}.jpg`, `${base}.jpeg`, `${base}.png`, `${base}.webp`];
+        const unique = [...new Set(candidates)];
+        let idx = 0;
+        const tryNext = () => {
+          if (idx >= unique.length) { onFail(); return; }
+          const candidate = unique[idx++];
+          const img = new Image();
+          img.onload = () => onSuccess(img, candidate);
+          img.onerror = tryNext;
+          img.src = candidate;
+        };
+        tryNext();
+      }
+
+      function refreshWallFrameTexture(photoKey) {
+        const ph = gameData.photos[photoKey];
+        const mats = wallFrameMeshes[photoKey];
+        if (!ph || !mats || !mats.length) return;
+        loadImageWithFallback(
+          ph.url,
+          (img) => {
+            const tex = createWallFrameTexture(ph.title, ph.caption, img);
+            mats.forEach((m) => { m.map = tex; m.needsUpdate = true; });
+          },
+          () => {
+            const tex = createWallFrameTexture(ph.title, ph.caption, null);
+            mats.forEach((m) => { m.map = tex; m.needsUpdate = true; });
+          }
+        );
+      }
+
+      let gameData = loadData();
+      let prog = loadProgress();
+
+      function saveAll() {
+        try {
+          localStorage.setItem(STORAGE_KEY + '_data', JSON.stringify(gameData));
+          localStorage.setItem(STORAGE_KEY + '_prog', JSON.stringify(prog));
+        } catch (e) {}
+      }
+
+      /**
+       * =======================================================================
+       * 2. PROCEDURAL WEB AUDIO SOUND DESIGN
+       * =======================================================================
+       */
+      class SoundFX {
+        constructor() {
+          this.ctx = null;
+          this.enabled = true;
+        }
+        init() {
+          if (!this.ctx) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (AC) this.ctx = new AC();
+          }
+          if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+        }
+        play(f1, f2, dur = 0.14, type = 'triangle', vol = 0.05, delay = 0) {
+          if (!this.enabled) return;
+          try {
+            this.init();
+            if (!this.ctx) return;
+            const t = this.ctx.currentTime + delay;
+            const osc = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(f1, t);
+            if (f2) osc.frequency.exponentialRampToValueAtTime(f2, t + dur);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(vol, t + 0.015);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            osc.connect(g); g.connect(this.ctx.destination);
+            osc.start(t); osc.stop(t + dur + 0.02);
+          } catch (e) {}
+        }
+        click() { this.play(480, 640, 0.09); }
+        pickup() { this.play(523.25, 659.25, 0.14, 'sine', 0.06); this.play(783.99, null, 0.18, 'triangle', 0.05, 0.08); }
+        door() { this.play(210, 320, 0.28, 'triangle', 0.065); }
+        err() { this.play(230, 180, 0.18, 'sine', 0.05); }
+        star() { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this.play(f, null, 0.35, 'sine', 0.06, i * 0.09)); }
+        win() { [392, 493.88, 587.33, 783.99, 987.77].forEach((f, i) => this.play(f, null, 0.75, 'triangle', 0.06, i * 0.11)); }
+      }
+      const sfx = new SoundFX();
+
+      /**
+       * =======================================================================
+       * 3. THREE.JS 3D SCENE, LIGHTING & PROCEDURAL TEXTURES
+       * =======================================================================
+       */
+      const container = document.getElementById('webgl-container');
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color('#191226');
+      scene.fog = new THREE.FogExp2('#191226', 0.016);
+
+      const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 140);
+      const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      container.appendChild(renderer.domElement);
+
+      // Warm Golden Sunlight + Soft Lavender/Amber Ambient Fill
+      const hemiLight = new THREE.HemisphereLight('#ffe9c4', '#3b2854', 0.95);
+      scene.add(hemiLight);
+
+      const sunLight = new THREE.DirectionalLight('#ffd699', 1.35);
+      sunLight.position.set(-14, 22, 16);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      sunLight.shadow.camera.near = 2;
+      sunLight.shadow.camera.far = 90;
+      const d = 32;
+      sunLight.shadow.camera.left = -d;
+      sunLight.shadow.camera.right = d;
+      sunLight.shadow.camera.top = d;
+      sunLight.shadow.camera.bottom = -d;
+      sunLight.shadow.bias = -0.0005;
+      scene.add(sunLight);
+
+      // Procedural Hardwood Plank Texture
+      function createWoodFloorTexture(baseHex, lineHex) {
+        const c = document.createElement('canvas');
+        c.width = 256; c.height = 256;
+        const g = c.getContext('2d');
+        g.fillStyle = baseHex;
+        g.fillRect(0, 0, 256, 256);
+        g.strokeStyle = lineHex;
+        g.lineWidth = 3;
+        for (let y = 0; y < 256; y += 32) {
+          g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke();
+          const offset = (y / 32) % 2 === 0 ? 64 : 160;
+          g.beginPath(); g.moveTo(offset, y); g.lineTo(offset, y + 32); g.stroke();
+        }
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(4, 4);
+        return tex;
+      }
+
+      // Procedural Woven Purple Ornate Rug Texture (matching reference image!)
+      function createPurpleRugTexture() {
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 512;
+        const g = c.getContext('2d');
+        g.fillStyle = '#532c75';
+        g.fillRect(0, 0, 512, 512);
+        g.strokeStyle = '#7e48ad';
+        g.lineWidth = 18;
+        g.strokeRect(24, 24, 464, 464);
+        g.strokeStyle = '#c084fc';
+        g.lineWidth = 4;
+        g.strokeRect(44, 44, 424, 424);
+        // Mandala center motif
+        g.translate(256, 256);
+        for (let i = 0; i < 12; i++) {
+          g.rotate(Math.PI / 6);
+          g.strokeStyle = 'rgba(216, 180, 254, 0.35)';
+          g.lineWidth = 3;
+          g.beginPath();
+          g.ellipse(0, 58, 22, 48, 0, 0, Math.PI * 2);
+          g.stroke();
+        }
+        return new THREE.CanvasTexture(c);
+      }
+
+      // Procedural Pinboard Poster Texture ("Dream, Learn, Build, Belong")
+      function createPinboardTexture() {
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 340;
+        const g = c.getContext('2d');
+        g.fillStyle = '#9c663b';
+        g.fillRect(0, 0, 512, 340);
+        // Pink motivational poster in center
+        g.fillStyle = '#f9a8d4';
+        g.fillRect(190, 32, 145, 265);
+        g.fillStyle = '#4a1d3f';
+        g.font = 'bold 28px Fredoka, sans-serif';
+        g.textAlign = 'center';
+        ['Dream', 'Learn', 'Build', 'Belong'].forEach((w, idx) => {
+          g.fillText(w, 262, 84 + idx * 44);
+        });
+        g.fillStyle = '#db2777';
+        g.font = '32px sans-serif';
+        g.fillText('♥', 262, 268);
+        // Small pinned photo cards around poster
+        const cards = [
+          [40, 40], [115, 45], [45, 135], [115, 140], [360, 48], [365, 155]
+        ];
+        cards.forEach(([x, y], i) => {
+          g.fillStyle = '#fffdf9';
+          g.fillRect(x, y, 58, 72);
+          g.fillStyle = i % 2 === 0 ? '#7c3aed' : '#d97706';
+          g.fillRect(x + 6, y + 6, 46, 48);
+        });
+        return new THREE.CanvasTexture(c);
+      }
+
+      /**
+       * =======================================================================
+       * 4. DETAILED 3D PROTAGONIST MODEL (MATCHING REFERENCE ARTWORK)
+       * =======================================================================
+       * - Warm brown skin with expressive eyes, arched brows & warm smile
+       * - Long burgundy & magenta-pink curly box braids cascading past shoulders
+       * - Gold hoop earrings
+       * - Fitted black long-sleeved mock-neck top
+       * - High-waisted wide-leg blue denim cargo jeans with side cargo pockets & gold button
+       * - White platform sneakers
+       */
+      function build3DCharacter() {
+        const root = new THREE.Group();
+
+        const skinMat = new THREE.MeshStandardMaterial({ color: '#7d4427', roughness: 0.48 });
+        const cheekMat = new THREE.MeshStandardMaterial({ color: '#9e4747', roughness: 0.5, transparent: true, opacity: 0.35 });
+        const lipMat = new THREE.MeshStandardMaterial({ color: '#a83852', roughness: 0.35 });
+        const browMat = new THREE.MeshStandardMaterial({ color: '#240c14', roughness: 0.6 });
+        const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+        const irisMat = new THREE.MeshBasicMaterial({ color: '#2b140d' });
+        const blackTopMat = new THREE.MeshStandardMaterial({ color: '#17151f', roughness: 0.68 });
+        const jeansMat = new THREE.MeshStandardMaterial({ color: '#3b5d96', roughness: 0.78 });
+        const jeansPocketMat = new THREE.MeshStandardMaterial({ color: '#314f82', roughness: 0.8 });
+        const jeansSeamMat = new THREE.MeshStandardMaterial({ color: '#587bb5', roughness: 0.75 });
+        const sneakerMat = new THREE.MeshStandardMaterial({ color: '#faf8f5', roughness: 0.42 });
+        const soleMat = new THREE.MeshStandardMaterial({ color: '#e2dcd5', roughness: 0.65 });
+        const goldMat = new THREE.MeshStandardMaterial({ color: '#fbbf24', metalness: 0.88, roughness: 0.18 });
+        const braidDarkMat = new THREE.MeshStandardMaterial({ color: '#450f24', roughness: 0.58 });
+        const braidPinkMat = new THREE.MeshStandardMaterial({ color: '#c4316e', roughness: 0.52 });
+
+        // Soft ground shadow disc
+        const shadowDisc = new THREE.Mesh(
+          new THREE.CircleGeometry(0.46, 28),
+          new THREE.MeshBasicMaterial({ color: '#0c0814', transparent: true, opacity: 0.36 })
+        );
+        shadowDisc.rotation.x = -Math.PI / 2;
+        shadowDisc.position.y = 0.02;
+        root.add(shadowDisc);
+
+        // --- HIPS, WAISTBAND & HIGH-WAISTED WIDE-LEG CARGO JEANS ---
+        const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.165, 0.23, 0.25, 22), jeansMat);
+        hips.position.y = 0.98;
+        hips.scale.set(1.08, 1, 0.86);
+        hips.castShadow = true;
+        root.add(hips);
+
+        const waistband = new THREE.Mesh(new THREE.CylinderGeometry(0.172, 0.172, 0.055, 22), jeansSeamMat);
+        waistband.position.y = 1.09;
+        waistband.scale.set(1.08, 1, 0.86);
+        root.add(waistband);
+
+        // Gold waist button & front fly seam
+        const button = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.015, 12), goldMat);
+        button.rotation.x = Math.PI / 2;
+        button.position.set(0, 1.09, 0.152);
+        root.add(button);
+
+        function makeLeg(side) {
+          const legPivot = new THREE.Group();
+          legPivot.position.set(side * 0.115, 0.9, 0);
+
+          // Flared wide-leg denim trouser
+          const pant = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.155, 0.8, 20), jeansMat);
+          pant.position.y = -0.4;
+          pant.scale.set(1.02, 1, 0.92);
+          pant.castShadow = true;
+          legPivot.add(pant);
+
+          // Side cargo pocket + flap
+          const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.19, 0.135), jeansPocketMat);
+          pocket.position.set(side * 0.125, -0.34, 0);
+          legPivot.add(pocket);
+
+          const flap = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.045, 0.142), jeansSeamMat);
+          flap.position.set(side * 0.126, -0.24, 0);
+          legPivot.add(flap);
+
+          // Rounded white platform sneaker
+          const shoeBody = new THREE.Mesh(new THREE.BoxGeometry(0.145, 0.075, 0.26), sneakerMat);
+          shoeBody.position.set(0, -0.825, 0.035);
+          shoeBody.castShadow = true;
+          legPivot.add(shoeBody);
+
+          const shoeToe = new THREE.Mesh(new THREE.SphereGeometry(0.073, 14, 12), sneakerMat);
+          shoeToe.scale.set(1, 0.52, 1.1);
+          shoeToe.position.set(0, -0.825, 0.15);
+          legPivot.add(shoeToe);
+
+          const shoeSole = new THREE.Mesh(new THREE.BoxGeometry(0.152, 0.032, 0.28), soleMat);
+          shoeSole.position.set(0, -0.865, 0.045);
+          legPivot.add(shoeSole);
+
+          return legPivot;
+        }
+
+        const leftLeg = makeLeg(-1);
+        const rightLeg = makeLeg(1);
+        root.add(leftLeg, rightLeg);
+
+        // --- SCULPTED TORSO: FITTED BLACK LONG-SLEEVED MOCK-NECK TOP ---
+        const torsoGroup = new THREE.Group();
+        torsoGroup.position.y = 1.11;
+        root.add(torsoGroup);
+
+        const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.185, 0.162, 0.24, 22), blackTopMat);
+        waist.position.y = 0.12;
+        waist.scale.set(1.06, 1, 0.84);
+        waist.castShadow = true;
+        torsoGroup.add(waist);
+
+        const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.185, 0.24, 22), blackTopMat);
+        chest.position.y = 0.34;
+        chest.scale.set(1.1, 1, 0.88);
+        chest.castShadow = true;
+        torsoGroup.add(chest);
+
+        // Rounded shoulders
+        [-0.21, 0.21].forEach((sx) => {
+          const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.072, 14, 14), blackTopMat);
+          shoulder.position.set(sx, 0.42, 0);
+          torsoGroup.add(shoulder);
+        });
+
+        // Mock-neck collar
+        const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.086, 0.098, 0.085, 18), blackTopMat);
+        collar.position.y = 0.49;
+        torsoGroup.add(collar);
+
+        // Slender Arms (Fitted black sleeves + sculpted hands)
+        function makeArm(side) {
+          const armPivot = new THREE.Group();
+          armPivot.position.set(side * 0.225, 0.41, 0);
+
+          const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.048, 0.25, 16), blackTopMat);
+          upperArm.position.set(side * 0.015, -0.12, 0);
+          upperArm.rotation.z = side * 0.1;
+          upperArm.castShadow = true;
+          armPivot.add(upperArm);
+
+          const foreArm = new THREE.Mesh(new THREE.CylinderGeometry(0.047, 0.04, 0.25, 16), blackTopMat);
+          foreArm.position.set(side * 0.032, -0.35, 0.015);
+          foreArm.rotation.z = side * 0.04;
+          foreArm.rotation.x = -0.08;
+          foreArm.castShadow = true;
+          armPivot.add(foreArm);
+
+          const hand = new THREE.Mesh(new THREE.SphereGeometry(0.046, 14, 14), skinMat);
+          hand.scale.set(0.85, 1.25, 0.72);
+          hand.position.set(side * 0.036, -0.5, 0.03);
+          armPivot.add(hand);
+
+          return armPivot;
+        }
+        const leftArm = makeArm(-1);
+        const rightArm = makeArm(1);
+        torsoGroup.add(leftArm, rightArm);
+
+        // --- EXPRESSIVE HEAD, ARCHED BROWS, GOLD HOOPS & LONG CURLY BRAIDS ---
+        const headGroup = new THREE.Group();
+        headGroup.position.y = 0.55;
+        torsoGroup.add(headGroup);
+
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.064, 0.076, 0.12, 16), skinMat);
+        neck.position.y = -0.01;
+        headGroup.add(neck);
+
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.215, 28, 28), skinMat);
+        head.position.y = 0.19;
+        head.scale.set(0.94, 1.06, 0.96);
+        head.castShadow = true;
+        headGroup.add(head);
+
+        // Soft warm cheek blush
+        [-0.105, 0.105].forEach((cx) => {
+          const blush = new THREE.Mesh(new THREE.SphereGeometry(0.036, 12, 12), cheekMat);
+          blush.position.set(cx, 0.155, 0.182);
+          blush.scale.set(1.2, 0.75, 0.4);
+          headGroup.add(blush);
+        });
+
+        // Expressive almond eyes + arched eyebrows
+        [-0.074, 0.074].forEach((ex, idx) => {
+          const eye = new THREE.Mesh(new THREE.SphereGeometry(0.034, 14, 14), eyeWhiteMat);
+          eye.position.set(ex, 0.21, 0.192);
+          eye.scale.set(1.22, 0.88, 0.55);
+          headGroup.add(eye);
+
+          const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 12), irisMat);
+          pupil.position.set(ex, 0.21, 0.207);
+          headGroup.add(pupil);
+
+          const catchlight = new THREE.Mesh(new THREE.SphereGeometry(0.007, 8, 8), eyeWhiteMat);
+          catchlight.position.set(ex + 0.008, 0.218, 0.223);
+          headGroup.add(catchlight);
+
+          const brow = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.0075, 8, 16, Math.PI * 0.8), browMat);
+          brow.position.set(ex, 0.252, 0.194);
+          brow.rotation.z = idx === 0 ? 0.22 : 0.42;
+          headGroup.add(brow);
+        });
+
+        // Subtle sculpted nose & warm confident smile
+        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 12), skinMat);
+        nose.position.set(0, 0.168, 0.212);
+        nose.scale.set(0.95, 0.8, 1.05);
+        headGroup.add(nose);
+
+        const lips = new THREE.Mesh(new THREE.TorusGeometry(0.038, 0.011, 10, 18, Math.PI * 0.92), lipMat);
+        lips.position.set(0, 0.118, 0.2);
+        lips.rotation.z = Math.PI + 0.12;
+        headGroup.add(lips);
+
+        // Gold Hoop Earrings
+        [-0.208, 0.208].forEach((earX) => {
+          const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.0075, 10, 22), goldMat);
+          hoop.position.set(earX, 0.135, 0.01);
+          hoop.rotation.y = Math.PI / 2;
+          headGroup.add(hoop);
+        });
+
+        // Braided Crown Cap
+        const hairCap = new THREE.Mesh(
+          new THREE.SphereGeometry(0.226, 24, 20, 0, Math.PI * 2, 0, Math.PI * 0.58),
+          braidDarkMat
+        );
+        hairCap.position.set(0, 0.205, -0.015);
+        hairCap.rotation.x = -0.18;
+        headGroup.add(hairCap);
+
+        // Long Cascading Burgundy & Magenta Curly Box Braids (past chest/waist like reference!)
+        const braidStrands = [];
+        const strandCount = 28;
+        for (let i = 0; i < strandCount; i++) {
+          const angle = (i / strandCount) * Math.PI * 2;
+          if (Math.sin(angle) > 0.7 && Math.abs(Math.cos(angle)) < 0.48) continue;
+
+          const strandGroup = new THREE.Group();
+          const radius = 0.208;
+          strandGroup.position.set(
+            Math.cos(angle) * radius,
+            0.28,
+            Math.sin(angle) * radius * 0.94
+          );
+
+          const mat = i % 2 === 0 ? braidDarkMat : braidPinkMat;
+          const segs = 10;
+          for (let s = 0; s < segs; s++) {
+            const bead = new THREE.Mesh(new THREE.SphereGeometry(0.023, 8, 8), mat);
+            const curlAmp = s > 5 ? 0.036 : 0.018;
+            const curlX = Math.sin(s * 1.45 + i) * curlAmp + Math.cos(angle) * (s * 0.013);
+            const curlZ = Math.cos(s * 1.45 + i) * curlAmp + Math.sin(angle) * (s * 0.011);
+            bead.position.set(curlX, -s * 0.085, curlZ);
+            bead.scale.set(1, 1.75, 1);
+            bead.castShadow = true;
+            strandGroup.add(bead);
+          }
+
+          headGroup.add(strandGroup);
+          braidStrands.push({ group: strandGroup, phase: i * 0.45 });
+        }
+
+        return {
+          root,
+          torsoGroup,
+          headGroup,
+          leftLeg,
+          rightLeg,
+          leftArm,
+          rightArm,
+          braidStrands
+        };
+      }
+
+      const character = build3DCharacter();
+      character.root.position.set(0, 0, 2.2);
+      scene.add(character.root);
+
+      /**
+       * =======================================================================
+       * 5. BUILD ALL FIVE CONNECTED 3D ROOMS & HANDCRAFTED FURNITURE
+       * =======================================================================
+       * Rooms are arranged along the -Z axis with physical doorways connecting them:
+       * Room 1: z in [-5, 5]
+       * Room 2: z in [-17, -7]
+       * Room 3: z in [-29, -19]
+       * Room 4: z in [-41, -31]
+       * Room 5: z in [-53, -43]
+       */
+      let subtitleTimer = null;
+      function setSubtitle(msg, durationMs = 5500) {
+        const bar = document.getElementById('subtitle-bar');
+        const txt = document.getElementById('subtitle-text');
+        if (!bar || !txt) return;
+        txt.textContent = msg;
+        bar.classList.remove('opacity-0', 'pointer-events-none');
+        bar.classList.add('opacity-100');
+        if (subtitleTimer) clearTimeout(subtitleTimer);
+        if (durationMs > 0) {
+          subtitleTimer = setTimeout(() => {
+            bar.classList.remove('opacity-100');
+            bar.classList.add('opacity-0', 'pointer-events-none');
+          }, durationMs);
+        }
+      }
+
+      function hideSubtitle() {
+        const bar = document.getElementById('subtitle-bar');
+        if (!bar) return;
+        bar.classList.remove('opacity-100');
+        bar.classList.add('opacity-0', 'pointer-events-none');
+      }
+
+      function addPottedPlant(parent, x, y, z, scale = 1) {
+        const g = new THREE.Group();
+        g.position.set(x, y, z);
+        g.scale.setScalar(scale);
+        const pot = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.24, 0.18, 0.34, 14),
+          new THREE.MeshStandardMaterial({ color: '#c26d4a', roughness: 0.7 })
+        );
+        pot.position.y = 0.17;
+        pot.castShadow = true;
+        g.add(pot);
+
+        const leafMat = new THREE.MeshStandardMaterial({ color: '#3b8c54', roughness: 0.55 });
+        for (let i = 0; i < 6; i++) {
+          const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 10), leafMat);
+          const a = (i / 6) * Math.PI * 2;
+          leaf.position.set(Math.cos(a) * 0.14, 0.42 + (i % 2) * 0.1, Math.sin(a) * 0.14);
+          leaf.scale.set(1.2, 0.7, 0.8);
+          leaf.castShadow = true;
+          g.add(leaf);
+        }
+        parent.add(g);
+      }
+
+      const ROOM_SPECS = [
+        { id: 1, zCenter: 0, doorZ: -5, doorKey: 'door12Open', wallColor: '#4a355c', floorBase: '#8c5832', floorLine: '#633c20' },
+        { id: 2, zCenter: -12, doorZ: -17, doorKey: 'door23Open', wallColor: '#2c3e55', floorBase: '#5d6b7a', floorLine: '#414d59' },
+        { id: 3, zCenter: -24, doorZ: -29, doorKey: 'door34Open', wallColor: '#4c3859', floorBase: '#855533', floorLine: '#5e3a20' },
+        { id: 4, zCenter: -36, doorZ: -41, doorKey: 'door45Open', wallColor: '#3d3354', floorBase: '#7d5233', floorLine: '#593820' },
+        { id: 5, zCenter: -48, doorZ: null, doorKey: null, wallColor: '#563c6b', floorBase: '#99663d', floorLine: '#6e4729' }
+      ];
+
+      const colliders = [];
+      const doorMeshes = {};
+      const roomNorthWalls = {};
+      const wallFrameMeshes = {};
+
+      function createWallFrameTexture(title, subtitle, imgObj = null) {
+        const c = document.createElement('canvas');
+        c.width = 512;
+        c.height = 360;
+        const g = c.getContext('2d');
+        g.fillStyle = '#241936';
+        g.fillRect(0, 0, 512, 360);
+        g.strokeStyle = '#fbbf24';
+        g.lineWidth = 10;
+        g.strokeRect(10, 10, 492, 340);
+
+        if (imgObj) {
+          const iw = imgObj.width || 512;
+          const ih = imgObj.height || 360;
+          const scale = Math.max(472 / iw, 260 / ih);
+          const dw = iw * scale;
+          const dh = ih * scale;
+          g.save();
+          g.beginPath();
+          g.rect(20, 20, 472, 260);
+          g.clip();
+          g.drawImage(imgObj, 20 + (472 - dw) / 2, 20 + (260 - dh) / 2, dw, dh);
+          g.restore();
+        } else {
+          const grad = g.createLinearGradient(20, 20, 492, 280);
+          grad.addColorStop(0, '#3b2459');
+          grad.addColorStop(1, '#1f2947');
+          g.fillStyle = grad;
+          g.fillRect(20, 20, 472, 260);
+          g.fillStyle = '#fde68a';
+          g.font = 'bold 26px Fredoka, sans-serif';
+          g.textAlign = 'center';
+          g.fillText('✦ Memory Frame ✦', 256, 138);
+          g.fillStyle = '#d8b4fe';
+          g.font = '18px Plus Jakarta Sans, sans-serif';
+          g.fillText('Attach a photo to display on this wall', 256, 176);
+        }
+
+        g.fillStyle = '#140e21';
+        g.fillRect(20, 280, 472, 60);
+        g.fillStyle = '#ffffff';
+        g.font = 'bold 20px Fredoka, sans-serif';
+        g.textAlign = 'center';
+        g.fillText((title || '').slice(0, 38), 256, 308);
+        g.fillStyle = '#fcd34d';
+        g.font = '14px Plus Jakarta Sans, sans-serif';
+        g.fillText((subtitle || '').slice(0, 56), 256, 330);
+
+        const tex = new THREE.CanvasTexture(c);
+        tex.needsUpdate = true;
+        return tex;
+      }
+
+      function add3DWallFrame(parent, photoKey, x, y, z, rotY = 0, w = 2.1, h = 1.48) {
+        const ph = gameData.photos[photoKey] || { title: 'Memory Frame', caption: '', url: '' };
+        const frameGroup = new THREE.Group();
+        frameGroup.position.set(x, y, z);
+        frameGroup.rotation.y = rotY;
+
+        const backing = new THREE.Mesh(
+          new THREE.BoxGeometry(w + 0.14, h + 0.14, 0.08),
+          new THREE.MeshStandardMaterial({ color: '#784828', roughness: 0.5 })
+        );
+        frameGroup.add(backing);
+
+        const canvasMat = new THREE.MeshBasicMaterial({
+          map: createWallFrameTexture(ph.title, ph.caption, null)
+        });
+        const artPlane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), canvasMat);
+        artPlane.position.z = 0.045;
+        frameGroup.add(artPlane);
+
+        parent.add(frameGroup);
+        if (!wallFrameMeshes[photoKey]) wallFrameMeshes[photoKey] = [];
+        wallFrameMeshes[photoKey].push(canvasMat);
+
+        if (ph.url) refreshWallFrameTexture(photoKey);
+        return frameGroup;
+      }
+
+      function addBox(parent, w, h, d, x, y, z, color, castShadow = true) {
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(w, h, d),
+          new THREE.MeshStandardMaterial({ color, roughness: 0.65 })
+        );
+        mesh.position.set(x, y, z);
+        mesh.castShadow = castShadow;
+        mesh.receiveShadow = true;
+        parent.add(mesh);
+        return mesh;
+      }
+
+      // Build Architectural Shell for each of the 5 rooms
+      ROOM_SPECS.forEach((rm) => {
+        const g = new THREE.Group();
+        const floorTex = createWoodFloorTexture(rm.floorBase, rm.floorLine);
+        const floor = new THREE.Mesh(
+          new THREE.PlaneGeometry(11, 10),
+          new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.55 })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.set(0, 0, rm.zCenter);
+        floor.receiveShadow = true;
+        g.add(floor);
+
+        // Purple Ornate Rug in Room 1 (and tailored rugs in Rooms 2-5)
+        const rugMat = rm.id === 1
+          ? new THREE.MeshStandardMaterial({ map: createPurpleRugTexture(), roughness: 0.9 })
+          : new THREE.MeshStandardMaterial({ color: rm.id % 2 === 0 ? '#2e4f5c' : '#5e356b', roughness: 0.9 });
+        const rug = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 4.6), rugMat);
+        rug.rotation.x = -Math.PI / 2;
+        rug.position.set(0, 0.015, rm.zCenter + 0.4);
+        rug.receiveShadow = true;
+        g.add(rug);
+
+        // Left, Right & North Walls
+        addBox(g, 0.3, 4.2, 10, -5.5, 2.1, rm.zCenter, rm.wallColor, false);
+        addBox(g, 0.3, 4.2, 10, 5.5, 2.1, rm.zCenter, rm.wallColor, false);
+
+        // Warm Sunlight Window on Left Wall
+        const winGlow = new THREE.Mesh(
+          new THREE.PlaneGeometry(2.6, 2.1),
+          new THREE.MeshBasicMaterial({ color: '#fff3c4' })
+        );
+        winGlow.rotation.y = Math.PI / 2;
+        winGlow.position.set(-5.32, 2.35, rm.zCenter - 0.5);
+        g.add(winGlow);
+
+        // North Wall with Doorway Opening (or solid back wall in Room 5)
+        if (rm.doorZ !== null) {
+          const wallGroup = new THREE.Group();
+          const leftSeg = addBox(wallGroup, 4.3, 4.2, 0.3, -3.35, 2.1, rm.doorZ, rm.wallColor, false);
+          const rightSeg = addBox(wallGroup, 4.3, 4.2, 0.3, 3.35, 2.1, rm.doorZ, rm.wallColor, false);
+          const lintelSeg = addBox(wallGroup, 2.4, 1.3, 0.3, 0, 3.55, rm.doorZ, rm.wallColor, false);
+          [leftSeg, rightSeg, lintelSeg].forEach((m) => {
+            m.material.transparent = true;
+            m.material.opacity = 1;
+          });
+          g.add(wallGroup);
+          roomNorthWalls[rm.id] = { doorZ: rm.doorZ, meshes: [leftSeg, rightSeg, lintelSeg] };
+
+          // Glowing Crest Door Frame & Hinged Door Leaf
+          addBox(g, 2.1, 2.95, 0.38, 0, 1.48, rm.doorZ, '#3a324d');
+          const doorPivot = new THREE.Group();
+          doorPivot.position.set(-0.92, 0, rm.doorZ);
+          const leaf = addBox(doorPivot, 1.84, 2.8, 0.14, 0.92, 1.4, 0, '#7c5338');
+          // Glowing golden diamond emblem on door (matching reference image!)
+          const emblem = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.32, 0),
+            new THREE.MeshBasicMaterial({ color: '#fbbf24' })
+          );
+          emblem.scale.set(0.75, 1.15, 0.25);
+          emblem.position.set(0.92, 1.55, 0.08);
+          doorPivot.add(emblem);
+          g.add(doorPivot);
+          doorMeshes[rm.doorKey] = doorPivot;
+
+          // Connecting Hallway Floor & Side Walls between rooms
+          const hall = new THREE.Mesh(
+            new THREE.PlaneGeometry(2.4, 2.2),
+            new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.6 })
+          );
+          hall.rotation.x = -Math.PI / 2;
+          hall.position.set(0, 0, rm.doorZ - 1.0);
+          hall.receiveShadow = true;
+          g.add(hall);
+          addBox(g, 0.25, 3.2, 2.2, -1.15, 1.6, rm.doorZ - 1.0, rm.wallColor, false);
+          addBox(g, 0.25, 3.2, 2.2, 1.15, 1.6, rm.doorZ - 1.0, rm.wallColor, false);
+        } else {
+          addBox(g, 11, 4.2, 0.3, 0, 2.1, -53, rm.wallColor, false);
+        }
+
+        // Room Warm Point Light
+        const pLight = new THREE.PointLight('#ffdfaa', 0.85, 16);
+        pLight.position.set(0, 3.5, rm.zCenter);
+        g.add(pLight);
+
+        scene.add(g);
+      });
+
+      // --- POPULATE ROOM 1: THE BEGINNING (Cosy Bedroom & Study from Reference Image) ---
+      const r1Group = new THREE.Group();
+      scene.add(r1Group);
+      // Purple Bed with Flower Pillow on Left
+      addBox(r1Group, 2.2, 0.55, 3.1, -4.1, 0.28, 1.8, '#582c83');
+      addBox(r1Group, 0.75, 0.22, 0.75, -4.1, 0.66, 0.7, '#fbcfe8'); // Flower cushion
+      colliders.push({ x: -4.1, z: 1.8, r: 1.45 });
+
+      // Wooden Study Desk + Laptop + Glowing Orb Lamp + Pink Bottle
+      addBox(r1Group, 2.4, 0.12, 1.15, -2.5, 0.92, -3.5, '#966138');
+      addBox(r1Group, 0.7, 0.86, 1.05, -3.2, 0.43, -3.5, '#7c4d2b');
+      addBox(r1Group, 0.68, 0.04, 0.46, -2.4, 1.0, -3.45, '#334155'); // Laptop base
+      const laptopScreen = addBox(r1Group, 0.68, 0.44, 0.04, -2.4, 1.22, -3.66, '#1e1b4b');
+      laptopScreen.rotation.x = -0.18;
+      // Warm Glowing Globe Lamp
+      const orbLamp = new THREE.Mesh(
+        new THREE.SphereGeometry(0.18, 16, 16),
+        new THREE.MeshBasicMaterial({ color: '#fef08a' })
+      );
+      orbLamp.position.set(-1.6, 1.14, -3.6);
+      r1Group.add(orbLamp);
+      colliders.push({ x: -2.5, z: -3.5, r: 1.25 });
+
+      // Cork Pinboard ("Dream, Learn, Build, Belong") on Back Wall
+      const pinboard = new THREE.Mesh(
+        new THREE.BoxGeometry(2.1, 1.35, 0.08),
+        new THREE.MeshStandardMaterial({ map: createPinboardTexture() })
+      );
+      pinboard.position.set(-2.3, 2.25, -4.82);
+      r1Group.add(pinboard);
+      add3DWallFrame(r1Group, 'r1_pinboard', 5.3, 2.25, 0.3, -Math.PI / 2, 2.2, 1.55);
+
+      // Tall Wooden Bookshelf + Glowing Neon Crown Sign on Right
+      addBox(r1Group, 1.5, 2.8, 0.65, 3.2, 1.4, -4.4, '#7c4d2b');
+      const bookColors = ['#ec4899', '#8b5cf6', '#38bdf8', '#f59e0b', '#10b981'];
+      for (let shelf = 0; shelf < 4; shelf++) {
+        for (let b = 0; b < 6; b++) {
+          addBox(r1Group, 0.16, 0.36, 0.42, 2.68 + b * 0.2, 0.45 + shelf * 0.62, -4.35, bookColors[(shelf + b) % bookColors.length]);
+        }
+      }
+      colliders.push({ x: 3.2, z: -4.4, r: 1.05 });
+
+      // Glowing Neon Pink Crown on Back-Right Wall (from reference image!)
+      const crownMat = new THREE.MeshBasicMaterial({ color: '#f472b6' });
+      const crown = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.035, 8, 5), crownMat);
+      crown.position.set(1.85, 3.15, -4.8);
+      r1Group.add(crown);
+
+      // Locked 3-Digit Drawer Cabinet on Front-Right
+      addBox(r1Group, 1.1, 0.95, 0.9, 3.9, 0.48, 2.5, '#855329');
+      colliders.push({ x: 3.9, z: 2.5, r: 0.95 });
+
+      addPottedPlant(r1Group, 4.35, 0, -4.1, 1.15);
+      addPottedPlant(r1Group, -4.5, 0, -4.1, 1.0);
+
+      // --- POPULATE ROOM 2: THE AWAKENING (Responsible Computing Lab) ---
+      const r2Group = new THREE.Group();
+      scene.add(r2Group);
+      addBox(r2Group, 2.4, 0.9, 1.2, 0, 0.45, -12, '#334155'); // Central Lab Console
+      addBox(r2Group, 1.1, 0.62, 0.08, 0, 1.25, -12.1, '#38bdf8'); // Monitor
+      colliders.push({ x: 0, z: -12, r: 1.3 });
+
+      addBox(r2Group, 1.6, 0.85, 1.0, -3.6, 0.42, -10.2, '#7c4d2b'); // Technical Books Table
+      colliders.push({ x: -3.6, z: -10.2, r: 1.05 });
+
+      addBox(r2Group, 2.6, 1.4, 0.1, -2.5, 2.1, -16.8, '#f8fafc'); // Whiteboard
+      add3DWallFrame(r2Group, 'r2_session', 5.3, 2.25, -12.0, -Math.PI / 2, 2.3, 1.6);
+      addPottedPlant(r2Group, 4.2, 0, -15.5, 1.1);
+
+      // --- POPULATE ROOM 3: THE PEOPLE (Communal Library) ---
+      const r3Group = new THREE.Group();
+      scene.add(r3Group);
+      add3DWallFrame(r3Group, 'r3_mentees', 5.3, 2.25, -21.8, -Math.PI / 2, 2.1, 1.5);
+      add3DWallFrame(r3Group, 'r3_mentors', 5.3, 2.25, -26.2, -Math.PI / 2, 2.1, 1.5);
+      const roundTable = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.45, 1.45, 0.14, 24),
+        new THREE.MeshStandardMaterial({ color: '#8c5832', roughness: 0.6 })
+      );
+      roundTable.position.set(0, 0.85, -24);
+      roundTable.castShadow = true;
+      r3Group.add(roundTable);
+      addBox(r3Group, 0.45, 0.85, 0.45, 0, 0.42, -24, '#5e3a20');
+      colliders.push({ x: 0, z: -24, r: 1.55 });
+
+      const clueCoords = [
+        { id: 'c_mentees', x: -3.6, z: -21.2 },
+        { id: 'c_dstrack', x: 3.6, z: -21.2 },
+        { id: 'c_ict', x: -4.0, z: -24.2 },
+        { id: 'c_peer', x: 4.0, z: -24.2 },
+        { id: 'c_fellow', x: -3.4, z: -27.2 },
+        { id: 'c_wider', x: 3.4, z: -27.2 }
+      ];
+      const keepsakeFrameMeshes = {};
+
+      function createKeepsakeFrameTexture(title, desc, imgObj = null) {
+        const c = document.createElement('canvas');
+        c.width = 512;
+        c.height = 384;
+        const g = c.getContext('2d');
+        g.fillStyle = '#241936';
+        g.fillRect(0, 0, 512, 384);
+        g.strokeStyle = '#fbbf24';
+        g.lineWidth = 10;
+        g.strokeRect(10, 10, 492, 364);
+
+        if (imgObj) {
+          const iw = imgObj.width || 512;
+          const ih = imgObj.height || 260;
+          const scale = Math.max(472 / iw, 250 / ih);
+          const dw = iw * scale;
+          const dh = ih * scale;
+          g.save();
+          g.beginPath();
+          g.rect(20, 20, 472, 250);
+          g.clip();
+          g.drawImage(imgObj, 20 + (472 - dw) / 2, 20 + (250 - dh) / 2, dw, dh);
+          g.restore();
+        } else {
+          const grad = g.createLinearGradient(20, 20, 492, 270);
+          grad.addColorStop(0, '#4c2875');
+          grad.addColorStop(1, '#233159');
+          g.fillStyle = grad;
+          g.fillRect(20, 20, 472, 250);
+          g.fillStyle = '#fde68a';
+          g.font = 'bold 26px Fredoka, sans-serif';
+          g.textAlign = 'center';
+          g.fillText('✦ Keepsake Photo ✦', 256, 134);
+          g.fillStyle = '#e9d5ff';
+          g.font = '18px Plus Jakarta Sans, sans-serif';
+          g.fillText('Press E to add a photo & edit note', 256, 172);
+        }
+
+        g.fillStyle = '#140e21';
+        g.fillRect(20, 270, 472, 94);
+        g.fillStyle = '#ffffff';
+        g.font = 'bold 21px Fredoka, sans-serif';
+        g.textAlign = 'center';
+        g.fillText((title || '').slice(0, 34), 256, 302);
+        g.fillStyle = '#fcd34d';
+        g.font = '15px Plus Jakarta Sans, sans-serif';
+        g.fillText((desc || '').slice(0, 52), 256, 334);
+
+        const tex = new THREE.CanvasTexture(c);
+        tex.needsUpdate = true;
+        return tex;
+      }
+
+      function refreshKeepsakeFrameTexture(id) {
+        const ks = gameData.room3Keepsakes[id];
+        const mat = keepsakeFrameMeshes[id];
+        if (!ks || !mat) return;
+        loadImageWithFallback(
+          ks.url,
+          (img) => {
+            mat.map = createKeepsakeFrameTexture(ks.title, ks.desc, img);
+            mat.needsUpdate = true;
+          },
+          () => {
+            mat.map = createKeepsakeFrameTexture(ks.title, ks.desc, null);
+            mat.needsUpdate = true;
+          }
+        );
+      }
+
+      clueCoords.forEach((c) => {
+        const ks = gameData.room3Keepsakes[c.id];
+        addBox(r3Group, 0.95, 0.72, 0.95, c.x, 0.36, c.z, '#7c4d2b');
+        addBox(r3Group, 0.36, 0.06, 0.28, c.x - 0.16, 0.75, c.z + 0.18, '#fbbf24');
+
+        // Upright tabletop photo frame facing the center of Room 3
+        const stand = new THREE.Group();
+        stand.position.set(c.x, 1.04, c.z);
+        stand.lookAt(0, 1.04, -24);
+        const backing = new THREE.Mesh(
+          new THREE.BoxGeometry(0.76, 0.58, 0.05),
+          new THREE.MeshStandardMaterial({ color: '#5c361d', roughness: 0.5 })
+        );
+        stand.add(backing);
+        const ksMat = new THREE.MeshBasicMaterial({
+          map: createKeepsakeFrameTexture(ks.title, ks.desc, null)
+        });
+        const face = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.5), ksMat);
+        face.position.z = 0.03;
+        stand.add(face);
+        r3Group.add(stand);
+
+        keepsakeFrameMeshes[c.id] = ksMat;
+        if (ks.url) refreshKeepsakeFrameTexture(c.id);
+        colliders.push({ x: c.x, z: c.z, r: 0.8 });
+      });
+
+      // --- POPULATE ROOM 4: THE GROWTH ROOM (Personal Exhibition Studio) ---
+      const r4Group = new THREE.Group();
+      scene.add(r4Group);
+      add3DWallFrame(r4Group, 'r4_recover', -5.3, 2.25, -35.8, Math.PI / 2, 2.1, 1.5);
+      add3DWallFrame(r4Group, 'r4_speech', 5.3, 2.25, -35.8, -Math.PI / 2, 2.1, 1.5);
+      addBox(r4Group, 1.8, 0.88, 1.0, -3.5, 0.44, -33.5, '#7c4d2b'); // Application Desk
+      colliders.push({ x: -3.5, z: -33.5, r: 1.1 });
+
+      addBox(r4Group, 1.8, 0.88, 1.0, -3.5, 0.44, -38.0, '#3b7a57'); // ReCover Project Table
+      colliders.push({ x: -3.5, z: -38.0, r: 1.1 });
+
+      addBox(r4Group, 1.0, 1.2, 0.9, 3.6, 0.6, -33.5, '#7e22ce'); // Speaking Podium
+      colliders.push({ x: 3.6, z: -33.5, r: 0.95 });
+
+      addBox(r4Group, 1.2, 1.65, 0.9, 3.6, 0.82, -38.0, '#966138'); // Locked Display Cabinet
+      colliders.push({ x: 3.6, z: -38.0, r: 1.0 });
+
+      addBox(r4Group, 1.2, 1.05, 0.9, 0, 0.52, -36.0, '#4c1d95'); // Feedback Lectern
+      colliders.push({ x: 0, z: -36.0, r: 0.95 });
+
+      // --- POPULATE ROOM 5: THE FUTURE (Sunlit Memory Hall) ---
+      const r5Group = new THREE.Group();
+      scene.add(r5Group);
+      add3DWallFrame(r5Group, 'r1_pinboard', -3.3, 2.4, -52.8, 0, 1.75, 1.25);
+      add3DWallFrame(r5Group, 'r2_session', -1.1, 2.4, -52.8, 0, 1.75, 1.25);
+      add3DWallFrame(r5Group, 'r3_mentors', 1.1, 2.4, -52.8, 0, 1.75, 1.25);
+      add3DWallFrame(r5Group, 'r4_speech', 3.3, 2.4, -52.8, 0, 1.75, 1.25);
+      const pedestalMeshes = [];
+      [-2.4, -0.8, 0.8, 2.4].forEach((px, idx) => {
+        const ped = addBox(r5Group, 0.75, 1.15, 0.75, px, 0.58, -49.5, '#e9d5ff');
+        const orb = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.24, 0),
+          new THREE.MeshBasicMaterial({ color: prog.r5StarsPlaced.length > idx ? '#fbbf24' : '#64748b' })
+        );
+        orb.position.set(px, 1.45, -49.5);
+        r5Group.add(orb);
+        pedestalMeshes.push(orb);
+        colliders.push({ x: px, z: -49.5, r: 0.65 });
+      });
+
+      /**
+       * =======================================================================
+       * 6. INTERACTIVE OBJECTS & PUZZLE MODALS
+       * =======================================================================
+       */
+      const modalEl = document.getElementById('game-modal');
+      const modalTag = document.getElementById('modal-tag');
+      const modalTitle = document.getElementById('modal-title');
+      const modalBody = document.getElementById('modal-body');
+      let modalActive = false;
+
+      function openModal(tag, title, html) {
+        modalTag.textContent = tag;
+        modalTitle.textContent = title;
+        modalBody.innerHTML = html;
+        modalEl.classList.remove('hidden');
+        modalEl.classList.add('flex');
+        modalActive = true;
+      }
+
+      function closeModal() {
+        modalEl.classList.add('hidden');
+        modalEl.classList.remove('flex');
+        modalActive = false;
+      }
+      document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+      modalEl.addEventListener('pointerdown', (e) => { if (e.target === modalEl) closeModal(); });
+
+      function addInventoryItem(item) {
+        if (prog.inventory.some((i) => i.id === item.id)) return;
+        prog.inventory.push(item);
+        saveAll();
+        updateHUD();
+        sfx.pickup();
+      }
+
+      function removeInventoryItem(id) {
+        prog.inventory = prog.inventory.filter((i) => i.id !== id);
+        saveAll();
+        updateHUD();
+      }
+
+      function addR1Slip(text) {
+        if (!prog.r1Fragments.includes(text)) {
+          prog.r1Fragments.push(text);
+          saveAll();
+        }
+      }
+
+      function openPhotoViewer(photoKey) {
+        sfx.click();
+        const ph = gameData.photos[photoKey];
+        if (!ph) return;
+        openModal(
+          'MEMORY PHOTOGRAPH',
+          ph.title,
+          `<div class="space-y-4">
+            <div id="ph-viewer-box" class="w-full h-60 rounded-2xl border border-purple-300/30 bg-black/40 overflow-hidden flex items-center justify-center">
+              ${ph.url
+                ? `<img id="ph-viewer-img" src="${ph.url}" alt="${ph.title}" class="w-full h-full object-cover" />`
+                : `<div class="text-center p-6"><p class="font-display font-bold text-base text-amber-200">${ph.title}</p><p class="text-xs text-purple-300 mt-1">Click below to attach your real photograph.</p></div>`}
+            </div>
+            <p class="text-sm text-purple-100 leading-relaxed">${ph.caption}</p>
+            <button id="btn-attach-single" type="button" class="btn-primary px-4 py-2 rounded-xl text-xs font-bold cursor-pointer">Attach / Change Photograph</button>
+          </div>`
+        );
+        const viewerImg = document.getElementById('ph-viewer-img');
+        if (viewerImg) {
+          viewerImg.onerror = () => {
+            const box = document.getElementById('ph-viewer-box');
+            if (box) {
+              box.innerHTML = `<div class="text-center p-6"><p class="font-display font-bold text-base text-amber-200">${ph.title}</p><p class="text-xs text-purple-300 mt-1">Place <strong>${ph.url}</strong> in your repository or upload a photo below.</p></div>`;
+            }
+          };
+        }
+        document.getElementById('btn-attach-single')?.addEventListener('click', openPhotoManagerModal);
+      }
+
+      function openPhotoManagerModal() {
+        sfx.click();
+        openModal(
+          'PRESENTER PHOTOGRAPH MANAGER',
+          'Attach Photographs to Room Frames',
+          `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            ${Object.entries(gameData.photos).map(([k, ph]) => `
+              <div class="p-3.5 rounded-2xl bg-white/5 border border-purple-300/20 space-y-2 text-xs">
+                <p class="font-bold text-white">${ph.title}</p>
+                ${ph.url ? `<img src="${ph.url}" alt="${ph.title}" class="w-full h-24 object-cover rounded-xl" />` : `<div class="h-16 rounded-xl border border-dashed border-purple-300/30 flex items-center justify-center text-purple-300">No photo attached</div>`}
+                <label class="inline-block btn-secondary px-3 py-1.5 rounded-lg font-bold cursor-pointer">
+                  ${ph.url ? 'Replace Photo' : 'Upload Photo'}
+                  <input data-ph-up="${k}" type="file" accept="image/*" class="hidden" />
+                </label>
+              </div>
+            `).join('')}
+          </div>`
+        );
+        modalBody.querySelectorAll('[data-ph-up]').forEach((inp) => {
+          inp.addEventListener('change', (e) => {
+            const k = inp.getAttribute('data-ph-up');
+            const f = e.target.files?.[0];
+            if (!f) return;
+            const r = new FileReader();
+            r.onload = () => {
+              gameData.photos[k].url = r.result;
+              saveAll();
+              refreshWallFrameTexture(k);
+              openPhotoManagerModal();
+            };
+            r.readAsDataURL(f);
+          });
+        });
+      }
+
+      function openKeepsakeModal(id) {
+        const ks = gameData.room3Keepsakes[id];
+        if (!ks) return;
+        openModal(
+          `COMMUNITY KEEPSAKE (${prog.r3Clues.length}/6)`,
+          ks.title,
+          `<div class="space-y-3.5 text-xs">
+            <div id="ks-viewer-box" class="w-full h-56 rounded-2xl border border-amber-300/40 bg-black/40 overflow-hidden flex items-center justify-center">
+              ${ks.url
+                ? `<img id="ks-viewer-img" src="${ks.url}" alt="${ks.title}" class="w-full h-full object-cover" />`
+                : `<div class="text-center p-4"><p class="font-display font-bold text-sm text-amber-200">${ks.title}</p><p class="text-[11px] text-purple-300 mt-1">No picture uploaded yet — upload a photo below to display it on this keepsake table.</p></div>`}
+            </div>
+            <div class="p-3.5 rounded-2xl bg-white/5 border border-purple-300/25">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-amber-300 block mb-1">Keepsake Story &amp; Description</span>
+              <p class="text-xs sm:text-sm text-white leading-relaxed">${ks.desc}</p>
+            </div>
+            <details class="rounded-2xl bg-black/30 border border-purple-300/20 p-3">
+              <summary class="font-bold text-amber-200 cursor-pointer">Upload Picture or Edit Title &amp; Description</summary>
+              <div class="space-y-2.5 pt-3">
+                <div>
+                  <label class="font-bold text-purple-200 block mb-1">Connection Title:</label>
+                  <input id="ks-title-inp" type="text" value="${ks.title.replace(/"/g, '&quot;')}" class="w-full p-2.5 rounded-xl bg-black/40 border border-purple-300/30 text-white text-xs sm:text-sm" />
+                </div>
+                <div>
+                  <label class="font-bold text-purple-200 block mb-1">Your Reflection / Description:</label>
+                  <textarea id="ks-desc-inp" rows="3" class="w-full p-2.5 rounded-xl bg-black/40 border border-purple-300/30 text-white text-xs sm:text-sm leading-relaxed">${ks.desc}</textarea>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <label class="btn-secondary px-3.5 py-2 rounded-xl font-bold cursor-pointer">
+                    ${ks.url ? 'Replace Picture' : 'Upload Picture'}
+                    <input id="ks-photo-inp" type="file" accept="image/*" class="hidden" />
+                  </label>
+                  <button id="btn-save-ks" type="button" class="btn-primary px-5 py-2 rounded-xl font-display font-bold text-xs sm:text-sm cursor-pointer">
+                    Save Keepsake
+                  </button>
+                </div>
+              </div>
+            </details>
+          </div>`
+        );
+
+        const ksImg = document.getElementById('ks-viewer-img');
+        if (ksImg) {
+          ksImg.onerror = () => {
+            const box = document.getElementById('ks-viewer-box');
+            if (box) {
+              box.innerHTML = `<div class="text-center p-4"><p class="font-display font-bold text-sm text-amber-200">${ks.title}</p><p class="text-[11px] text-purple-300 mt-1">Place <strong>${ks.url}</strong> in your repository or upload a photo below.</p></div>`;
+            }
+          };
+        }
+
+        document.getElementById('ks-photo-inp')?.addEventListener('change', (e) => {
+          const f = e.target.files?.[0];
+          if (!f) return;
+          const r = new FileReader();
+          r.onload = () => {
+            gameData.room3Keepsakes[id].title = document.getElementById('ks-title-inp').value.trim() || ks.title;
+            gameData.room3Keepsakes[id].desc = document.getElementById('ks-desc-inp').value;
+            gameData.room3Keepsakes[id].url = r.result;
+            saveAll();
+            refreshKeepsakeFrameTexture(id);
+            openKeepsakeModal(id);
+          };
+          r.readAsDataURL(f);
+        });
+
+        document.getElementById('btn-save-ks')?.addEventListener('click', () => {
+          sfx.pickup();
+          gameData.room3Keepsakes[id].title = document.getElementById('ks-title-inp').value.trim() || ks.title;
+          gameData.room3Keepsakes[id].desc = document.getElementById('ks-desc-inp').value;
+          saveAll();
+          refreshKeepsakeFrameTexture(id);
+          setSubtitle(`Saved "${gameData.room3Keepsakes[id].title}".`);
+          openKeepsakeModal(id);
+        });
+      }
+
+      // Register all 3D interactive objects across all 5 rooms
+      const INTERACTABLES = [
+        // --- ROOM 1 ---
+        {
+          id: 'r1_desk', room: 1, x: -2.5, z: -3.5, radius: 2.1,
+          label: () => (prog.r1Solved ? 'Review Study Desk' : 'Inspect Laptop Desk & Arrange Sentence'),
+          action: () => {
+            sfx.click();
+            prog.r1NotebookRead = true;
+            saveAll();
+            const target = ['I thought', 'technology', "wasn't meant", 'for me.'];
+            let placed = prog.r1Solved ? [...target] : [];
+            const renderDesk = (msg = '') => {
+              const pool = prog.r1Fragments.filter((x) => !placed.includes(x));
+              openModal(
+                'ROOM 1 // STUDY DESK & NOTEBOOK',
+                'Reconstruct the Hidden Memory',
+                `<div class="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-400/40 flex items-center justify-between">
+                  <span class="text-xs text-amber-200">Notebook margin clue (Drawer Code):</span>
+                  <span class="font-display font-bold text-lg text-amber-300 tracking-widest">1 - 0 - 4</span>
+                </div>
+                <p class="text-xs text-purple-200">Sentence slips found: <strong>${prog.r1Fragments.length} / 4</strong>. Search the Bookshelf and unlock the Drawer (104) to gather all 4 slips.</p>
+                <div class="p-4 rounded-2xl bg-black/35 border-2 border-dashed border-purple-300/40 min-h-[62px] flex flex-wrap gap-2">
+                  ${placed.length ? placed.map((w, i) => `<button data-rm="${i}" class="btn-primary px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer">${w}</button>`).join('') : '<span class="text-xs text-purple-400 italic">Click slips below in order...</span>'}
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  ${pool.map((w) => `<button data-ad="${w.replace(/"/g, '&quot;')}" class="btn-secondary px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer">+ ${w}</button>`).join('')}
+                </div>
+                ${msg ? `<p class="text-xs font-bold text-amber-300">${msg}</p>` : ''}
+                ${!prog.r1Solved && prog.r1Fragments.length === 4 ? `<button id="btn-r1-check" class="btn-primary px-5 py-2.5 rounded-xl font-display font-bold text-sm cursor-pointer">Confirm Sentence</button>` : ''}`
+              );
+              modalBody.querySelectorAll('[data-ad]').forEach((b) => b.addEventListener('click', () => {
+                if (prog.r1Solved) return;
+                sfx.click(); placed.push(b.getAttribute('data-ad')); renderDesk();
+              }));
+              modalBody.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => {
+                if (prog.r1Solved) return;
+                sfx.click(); placed.splice(Number(b.getAttribute('data-rm')), 1); renderDesk();
+              }));
+              document.getElementById('btn-r1-check')?.addEventListener('click', () => {
+                if (placed.length === 4 && placed.every((w, i) => w === target[i])) {
+                  sfx.star();
+                  prog.r1Solved = true;
+                  saveAll(); updateHUD();
+                  setSubtitle('Memory Fragment 1 (THE BEGINNING) recovered! Use the Brass Key on the glowing crest door.');
+                  renderDesk('★ Memory Fragment 1 Recovered: "I thought technology wasn\'t meant for me."');
+                } else {
+                  sfx.err();
+                  renderDesk('Arrange them in order: "I thought" → "technology" → "wasn\'t meant" → "for me."');
+                }
+              });
+            };
+            renderDesk();
+          }
+        },
+        {
+          id: 'r1_pinboard', room: 1, x: -2.3, z: -4.4, radius: 2.0,
+          label: 'Inspect Wall Pinboard & Photos',
+          action: () => openPhotoViewer('r1_pinboard')
+        },
+        {
+          id: 'r1_wall_frame', room: 1, x: 4.5, z: 0.3, radius: 2.2,
+          label: 'View & Attach Room 1 Wall Photo',
+          action: () => openPhotoViewer('r1_pinboard')
+        },
+        {
+          id: 'r1_shelf', room: 1, x: 3.2, z: -4.2, radius: 2.1,
+          label: 'Search Wooden Bookshelf',
+          action: () => {
+            sfx.pickup();
+            prog.r1ShelfRead = true;
+            addR1Slip('I thought');
+            addR1Slip('technology');
+            saveAll();
+            setSubtitle('Found two sentence slips inside a book: "I thought" and "technology".');
+            openModal(
+              'ROOM 1 // BOOKSHELF',
+              'Bookmarks Discovered',
+              `<p>Tucked between the pages of an introductory computing book, you discover two sentence slips:</p>
+              <div class="flex gap-2.5"><span class="px-3.5 py-2 rounded-xl bg-amber-500/20 border border-amber-400/50 font-bold">"I thought"</span><span class="px-3.5 py-2 rounded-xl bg-amber-500/20 border border-amber-400/50 font-bold">"technology"</span></div>`
+            );
+          }
+        },
+        {
+          id: 'r1_drawer', room: 1, x: 3.9, z: 2.5, radius: 2.0,
+          label: () => (prog.r1DrawerOpen ? 'Inspect Unlocked Drawer' : 'Unlock 3-Digit Drawer'),
+          action: () => {
+            sfx.click();
+            if (prog.r1DrawerOpen) {
+              openModal('ROOM 1 // DRAWER', 'Already Unlocked', '<p>You already collected the Brass Lab Key and two sentence slips from this drawer.</p>');
+              return;
+            }
+            let code = [0, 0, 0];
+            const renderCode = (err = '') => {
+              openModal(
+                'ROOM 1 // COMBINATION LOCK',
+                'Enter 3-Digit Drawer Code',
+                `<p class="text-xs text-purple-200">Hint: Check the notebook on the laptop desk (104).</p>
+                <div class="flex justify-center gap-3 py-2">
+                  ${code.map((d, i) => `
+                    <div class="flex flex-col items-center gap-1">
+                      <button data-u="${i}" class="btn-secondary w-11 h-8 rounded-lg font-bold cursor-pointer">▲</button>
+                      <div class="w-14 h-14 rounded-2xl bg-black/40 border border-amber-400/50 flex items-center justify-center font-display text-2xl font-bold text-amber-300">${d}</div>
+                      <button data-d="${i}" class="btn-secondary w-11 h-8 rounded-lg font-bold cursor-pointer">▼</button>
+                    </div>`).join('')}
+                </div>
+                ${err ? `<p class="text-xs font-bold text-rose-300 text-center">${err}</p>` : ''}
+                <div class="text-center"><button id="btn-unlock-d" class="btn-primary px-6 py-2.5 rounded-xl font-display font-bold cursor-pointer">Unlock Drawer</button></div>`
+              );
+              modalBody.querySelectorAll('[data-u]').forEach((b) => b.addEventListener('click', () => { sfx.click(); code[b.getAttribute('data-u')] = (code[b.getAttribute('data-u')] + 1) % 10; renderCode(); }));
+              modalBody.querySelectorAll('[data-d]').forEach((b) => b.addEventListener('click', () => { sfx.click(); code[b.getAttribute('data-d')] = (code[b.getAttribute('data-d')] + 9) % 10; renderCode(); }));
+              document.getElementById('btn-unlock-d')?.addEventListener('click', () => {
+                if (code.join('') === '104') {
+                  prog.r1DrawerOpen = true;
+                  addR1Slip("wasn't meant");
+                  addR1Slip('for me.');
+                  addInventoryItem({ id: 'brass_key', name: 'Brass Lab Key', desc: 'Opens the glowing crest door to Room 2.' });
+                  saveAll();
+                  setSubtitle('Drawer unlocked! Found the Brass Lab Key and the remaining two sentence slips.');
+                  openModal('DRAWER UNLOCKED', 'Hidden Compartment Opened', '<p>Inside you found <strong>"wasn\'t meant"</strong>, <strong>"for me."</strong>, and the <strong>🔑 Brass Lab Key</strong>!</p>');
+                } else {
+                  sfx.err(); renderCode('Incorrect code. Check the notebook on the laptop desk (104).');
+                }
+              });
+            };
+            renderCode();
+          }
+        },
+        {
+          id: 'door_1_2', room: 1, x: 0, z: -4.4, radius: 1.9,
+          hiddenWhenOpen: 'door12Open',
+          label: 'Unlock Glowing Crest Door',
+          action: () => {
+            if (prog.door12Open) return;
+            if (!prog.r1Solved) {
+              sfx.err(); setSubtitle('Arrange the 4 sentence slips at the laptop desk first to recover Memory Fragment 1.'); return;
+            }
+            if (prog.inventory.some((i) => i.id === 'brass_key')) {
+              sfx.door(); prog.door12Open = true; removeInventoryItem('brass_key');
+              setSubtitle('The glowing crest door swings open! Walk straight through into Room 2.');
+            } else {
+              sfx.err(); setSubtitle('You need the Brass Lab Key from the locked drawer.');
+            }
+          }
+        },
+
+        // --- ROOM 2 ---
+        {
+          id: 'r2_books', room: 2, x: -3.6, z: -10.2, radius: 1.9,
+          label: 'Read Responsible Computing Notes',
+          action: () => {
+            sfx.click(); prog.r2BooksRead = true; saveAll();
+            openModal('ROOM 2 // RESPONSIBLE COMPUTING', 'Beyond Working Code', '<p>During the KamiLimu session on <strong>Responsible Computing</strong>, I realized engineering is not just making code run—it is questioning <strong>why</strong> an approach was chosen, what trade-offs it carries, and who is affected.</p>');
+          }
+        },
+        {
+          id: 'r2_board', room: 2, x: -2.5, z: -16.4, radius: 2.0,
+          label: 'Inspect Lab Whiteboard',
+          action: () => {
+            sfx.click(); prog.r2BoardRead = true; saveAll();
+            openModal('ROOM 2 // WHITEBOARD', 'Engineering Questions', '<p><strong>Key Question:</strong> "Why did we choose this approach instead of another?" — Evaluates rationale, trade-offs, and human impact.</p>');
+          }
+        },
+        {
+          id: 'r2_wall_frame', room: 2, x: 4.5, z: -12.0, radius: 2.2,
+          label: 'View & Attach Room 2 Wall Photo',
+          action: () => openPhotoViewer('r2_session')
+        },
+        {
+          id: 'r2_console', room: 2, x: 0, z: -12, radius: 2.2,
+          label: () => (prog.r2Solved ? 'Review Lab Console' : 'Use Responsible Computing Console'),
+          action: () => {
+            sfx.click();
+            let q1 = prog.r2Solved ? 'B' : null;
+            let q2 = prog.r2Solved ? 'offline' : null;
+            const renderR2 = (note = '') => {
+              openModal(
+                'ROOM 2 // ENGINEERING JUDGEMENT',
+                'Challenge the System',
+                `<p class="text-xs text-purple-200">1. A script runs with zero errors. Which question reflects the deeper engineering mindset?</p>
+                <div class="space-y-1.5">
+                  ${[
+                    { id: 'A', t: 'A. Does the code run without errors?' },
+                    { id: 'B', t: 'B. Why did we choose this approach instead of another?' },
+                    { id: 'C', t: 'C. Can we make the code shorter?' }
+                  ].map((o) => `<button data-q1="${o.id}" class="w-full text-left p-3 rounded-xl border text-xs font-bold cursor-pointer ${q1 === o.id ? 'bg-amber-500/25 border-amber-400 text-white' : 'bg-white/5 border-purple-300/20'}">${o.t}</button>`).join('')}
+                </div>
+                <p class="text-xs text-purple-200 pt-2">2. Compare two designs for students with intermittent internet access:</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button data-q2="stream" class="text-left p-3 rounded-xl border text-xs cursor-pointer ${q2 === 'stream' ? 'bg-pink-500/25 border-pink-400' : 'bg-white/5 border-purple-300/20'}"><strong>Heavy Cloud Stream</strong><br/><span class="opacity-80">Always live, but fails offline &amp; uses high data.</span></button>
+                  <button data-q2="offline" class="text-left p-3 rounded-xl border text-xs cursor-pointer ${q2 === 'offline' ? 'bg-emerald-500/25 border-emerald-400' : 'bg-white/5 border-purple-300/20'}"><strong>Offline-Resilient Local Storage</strong><br/><span class="opacity-80">Works anywhere on low data; trade-off is careful sync.</span></button>
+                </div>
+                ${note ? `<p class="text-xs font-bold text-amber-300">${note}</p>` : ''}
+                ${!prog.r2Solved ? `<button id="btn-r2-ok" class="btn-primary px-5 py-2.5 rounded-xl font-display font-bold text-sm cursor-pointer">Confirm Decision</button>` : '<p class="text-xs font-bold text-emerald-300">★ Memory Fragment 2 (CURIOSITY) &amp; Library Key Unlocked!</p>'}`
+              );
+              modalBody.querySelectorAll('[data-q1]').forEach((b) => b.addEventListener('click', () => { sfx.click(); q1 = b.getAttribute('data-q1'); renderR2(); }));
+              modalBody.querySelectorAll('[data-q2]').forEach((b) => b.addEventListener('click', () => { sfx.click(); q2 = b.getAttribute('data-q2'); renderR2(); }));
+              document.getElementById('btn-r2-ok')?.addEventListener('click', () => {
+                if (q1 === 'B' && q2 === 'offline') {
+                  sfx.star(); prog.r2Solved = true;
+                  addInventoryItem({ id: 'lib_key', name: 'Library Key', desc: 'Opens the door to Room 3: The People.' });
+                  saveAll(); updateHUD();
+                  setSubtitle('Memory Fragment 2 (CURIOSITY) & Library Key earned!');
+                  renderR2('★ Memory Fragment 2 Recovered!');
+                } else {
+                  sfx.err(); renderR2('Select Option B in Question 1 and the Offline-Resilient design trade-off in Question 2.');
+                }
+              });
+            };
+            renderR2();
+          }
+        },
+        {
+          id: 'door_2_3', room: 2, x: 0, z: -16.4, radius: 1.9,
+          hiddenWhenOpen: 'door23Open',
+          label: 'Unlock Door to Room 3',
+          action: () => {
+            if (prog.door23Open) return;
+            if (prog.r2Solved && prog.inventory.some((i) => i.id === 'lib_key')) {
+              sfx.door(); prog.door23Open = true; removeInventoryItem('lib_key');
+              setSubtitle('Unlocked! Walk straight through the doorway into Room 3: The People.');
+            } else { sfx.err(); setSubtitle('Solve the Responsible Computing console first to get the Library Key.'); }
+          }
+        },
+
+        // --- ROOM 3 ---
+        {
+          id: 'r3_wall_mentees', room: 3, x: 4.5, z: -21.8, radius: 2.1,
+          label: 'View & Attach Fellow Mentees Wall Photo',
+          action: () => openPhotoViewer('r3_mentees')
+        },
+        {
+          id: 'r3_wall_mentors', room: 3, x: 4.5, z: -26.2, radius: 2.1,
+          label: 'View & Attach Mentors Wall Photo',
+          action: () => openPhotoViewer('r3_mentors')
+        },
+        ...clueCoords.map((c) => ({
+          id: c.id, room: 3, x: c.x, z: c.z, radius: 1.75,
+          label: () => `Inspect & Edit: ${gameData.room3Keepsakes[c.id].title}`,
+          action: () => {
+            sfx.pickup();
+            if (!prog.r3Clues.includes(c.id)) { prog.r3Clues.push(c.id); saveAll(); updateHUD(); }
+            const ks = gameData.room3Keepsakes[c.id];
+            setSubtitle(`Inspecting "${ks.title}" (${prog.r3Clues.length}/6 community connections).`);
+            openKeepsakeModal(c.id);
+          }
+        })),
+        {
+          id: 'door_3_4', room: 3, x: 0, z: -28.4, radius: 1.9,
+          hiddenWhenOpen: 'door34Open',
+          label: 'Locked Door to Room 4',
+          action: () => {
+            if (prog.door34Open) return;
+            sfx.err(); setSubtitle('Connect all 6 community pillars on the round table first.');
+          }
+        },
+        {
+          id: 'r3_table', room: 3, x: 0, z: -24, radius: 2.3,
+          label: () => (prog.r3Solved ? 'Review & Edit Community Network' : 'Connect Community Keepsakes on Table'),
+          action: () => {
+            sfx.click();
+            openModal(
+              'ROOM 3 // COMMUNAL LIBRARY TABLE',
+              'The Human Network (Click any card to edit or add photos)',
+              `<div class="flex flex-wrap items-center justify-between gap-2">
+                <p class="text-xs text-purple-200">Connections discovered: <strong>${prog.r3Clues.length} / 6</strong></p>
+                <div class="flex gap-2">
+                  <button id="btn-r3-ph1" type="button" class="btn-secondary px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer">Mentees Wall Photo</button>
+                  <button id="btn-r3-ph2" type="button" class="btn-secondary px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer">Mentors Wall Photo</button>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                ${clueCoords.map((c) => {
+                  const found = prog.r3Clues.includes(c.id);
+                  const ks = gameData.room3Keepsakes[c.id];
+                  return `<button data-edit-ks="${c.id}" type="button" class="text-left p-3 rounded-xl border text-xs transition cursor-pointer ${found ? 'bg-amber-500/20 border-amber-400 hover:border-white text-amber-100' : 'bg-white/5 border-purple-300/20 hover:border-purple-300/50 text-purple-300'}">
+                    ${ks.url ? `<img src="${ks.url}" alt="${ks.title}" class="w-full h-20 object-cover rounded-lg mb-2" />` : ''}
+                    <div class="flex items-center justify-between gap-1">
+                      <strong>${found ? '★ ' : '○ '}${ks.title}</strong>
+                      <span class="text-[10px] underline opacity-80">Edit / Photo</span>
+                    </div>
+                    <p class="mt-1 opacity-85">${ks.desc}</p>
+                  </button>`;
+                }).join('')}
+              </div>
+              ${prog.r3Clues.length === 6 && !prog.r3Solved ? '<button id="btn-r3-link" class="btn-primary px-5 py-2.5 rounded-xl font-display font-bold text-sm cursor-pointer">Restore Community Network</button>' : ''}
+              ${prog.r3Solved ? '<p class="text-xs font-bold text-emerald-300">★ Memory Fragment 3 (BELONGING) Recovered! Door to Room 4 is open.</p>' : ''}`
+            );
+            document.getElementById('btn-r3-ph1')?.addEventListener('click', () => openPhotoViewer('r3_mentees'));
+            document.getElementById('btn-r3-ph2')?.addEventListener('click', () => openPhotoViewer('r3_mentors'));
+            modalBody.querySelectorAll('[data-edit-ks]').forEach((btn) => {
+              btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-edit-ks');
+                if (!prog.r3Clues.includes(id)) { prog.r3Clues.push(id); saveAll(); updateHUD(); }
+                openKeepsakeModal(id);
+              });
+            });
+            document.getElementById('btn-r3-link')?.addEventListener('click', () => {
+              sfx.star();
+              prog.r3Solved = true;
+              prog.door34Open = true;
+              saveAll();
+              updateHUD();
+              closeModal();
+              setSubtitle('Memory Fragment 3 (BELONGING) recovered! Walk through the north door into Room 4.');
+            });
+          }
+        },
+        {
+          id: 'door_4_5', room: 4, x: 0, z: -40.4, radius: 1.9,
+          hiddenWhenOpen: 'door45Open',
+          label: 'Locked Door to Room 5',
+          action: () => {
+            if (prog.door45Open) return;
+            sfx.err(); setSubtitle('Complete both the Display Cabinet Timeline and Mentor Feedback Lectern first.');
+          }
+        },
+
+        // --- ROOM 4 ---
+        {
+          id: 'r4_apps', room: 4, x: -3.5, z: -33.5, radius: 1.9,
+          label: 'Inspect Application Documents Desk',
+          action: () => { sfx.click(); openModal('ROOM 4 // APPLICATION DESK', 'Applying for Professional Opportunities', '<p>Refining my CV and preparing applications taught me to step forward with clarity and apply mentor feedback directly to opportunities.</p>'); }
+        },
+        {
+          id: 'r4_recover', room: 4, x: -3.5, z: -38.0, radius: 1.9,
+          label: 'Inspect ReCover Project Table',
+          action: () => {
+            sfx.click();
+            openModal('ROOM 4 // RECOVER PROJECT', 'Developing ReCover', '<p>Building <strong>ReCover</strong> turned structured problem-solving into practical, user-centered engineering.</p><button id="btn-r4-rec-ph" class="btn-secondary px-4 py-2 rounded-xl text-xs font-bold cursor-pointer">View ReCover Photo Frame</button>');
+            document.getElementById('btn-r4-rec-ph')?.addEventListener('click', () => openPhotoViewer('r4_recover'));
+          }
+        },
+        {
+          id: 'r4_podium', room: 4, x: 3.6, z: -33.5, radius: 1.9,
+          label: 'Inspect Speaking Podium & Cue Cards',
+          action: () => {
+            const first = !prog.r4PodiumRead;
+            prog.r4PodiumRead = true;
+            if (first) addInventoryItem({ id: 'silver_key', name: 'Silver Cabinet Key', desc: 'Unlocks the Display Cabinet in Room 4.' });
+            saveAll();
+            setSubtitle(first ? 'Found the Silver Cabinet Key beside your speech cue cards!' : 'Your speech podium & personal milestone.');
+            openModal(
+              'ROOM 4 // SPEAKING PODIUM',
+              'Speech Performance & A Personal Milestone',
+              `<p>Delivering a speech in front of an audience challenged me to trust my voice and share my ideas with confidence.</p>
+              <div class="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-400/40">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-amber-300">Personal Milestone Outside KamiLimu</span>
+                <p class="text-xs sm:text-sm text-white mt-1">My mum is not part of the KamiLimu programme—she witnessed me perform my speech from outside and saw a side of me she had not previously seen.</p>
+              </div>
+              <button id="btn-r4-sp-ph" class="btn-secondary px-4 py-2 rounded-xl text-xs font-bold cursor-pointer">View Speech &amp; Milestone Photo</button>`
+            );
+            document.getElementById('btn-r4-sp-ph')?.addEventListener('click', () => openPhotoViewer('r4_speech'));
+          }
+        },
+        {
+          id: 'r4_cabinet', room: 4, x: 3.6, z: -38.0, radius: 2.0,
+          label: () => (prog.r4CabinetUnlocked ? 'Arrange Growth Timeline in Cabinet' : 'Unlock Display Cabinet'),
+          action: () => {
+            sfx.click();
+            if (!prog.r4CabinetUnlocked) {
+              if (prog.inventory.some((i) => i.id === 'silver_key')) {
+                sfx.door(); prog.r4CabinetUnlocked = true; removeInventoryItem('silver_key'); saveAll();
+              } else {
+                sfx.err(); openModal('LOCKED CABINET', 'Silver Key Needed', '<p>Inspect the Speaking Podium on the right to find the Silver Cabinet Key.</p>'); return;
+              }
+            }
+            const steps = [
+              'Becoming more confident in technology',
+              'Improving my problem-solving approach',
+              'Developing ReCover',
+              'Applying for professional opportunities',
+              'Performing a speech in front of an audience'
+            ];
+            let chosen = prog.r4TimelineDone ? [...steps] : [];
+            const renderCab = (msg = '') => {
+              const pool = steps.filter((s) => !chosen.includes(s));
+              openModal(
+                'ROOM 4 // GROWTH TIMELINE',
+                'Arrange Your Growth Milestones',
+                `<p class="text-xs text-purple-200">Click the milestones in order from foundational confidence to public speaking:</p>
+                <div class="space-y-1.5">${chosen.map((s, i) => `<button data-cr="${i}" class="w-full text-left px-3 py-2 rounded-xl bg-emerald-500/25 border border-emerald-400 text-xs font-bold cursor-pointer">${i + 1}. ${s}</button>`).join('')}</div>
+                <div class="flex flex-wrap gap-2">${pool.map((s) => `<button data-ca="${s}" class="btn-secondary px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer">+ ${s}</button>`).join('')}</div>
+                ${msg ? `<p class="text-xs font-bold text-amber-300">${msg}</p>` : ''}
+                ${!prog.r4TimelineDone && chosen.length === steps.length ? '<button id="btn-r4-tl" class="btn-primary px-5 py-2 rounded-xl font-display font-bold text-sm cursor-pointer">Confirm Timeline</button>' : ''}`
+              );
+              modalBody.querySelectorAll('[data-ca]').forEach((b) => b.addEventListener('click', () => { if (!prog.r4TimelineDone) { sfx.click(); chosen.push(b.getAttribute('data-ca')); renderCab(); } }));
+              modalBody.querySelectorAll('[data-cr]').forEach((b) => b.addEventListener('click', () => { if (!prog.r4TimelineDone) { sfx.click(); chosen.splice(Number(b.getAttribute('data-cr')), 1); renderCab(); } }));
+              document.getElementById('btn-r4-tl')?.addEventListener('click', () => {
+                if (chosen[0] === steps[0] && chosen[chosen.length - 1] === steps[steps.length - 1]) {
+                  sfx.pickup(); prog.r4TimelineDone = true; checkR4(); renderCab('✓ Growth timeline verified!');
+                } else { sfx.err(); renderCab('Start with "Becoming more confident in technology" and end with "Performing a speech in front of an audience".'); }
+              });
+            };
+            renderCab(prog.r4TimelineDone ? '✓ Growth timeline verified!' : '');
+          }
+        },
+        {
+          id: 'r4_lectern', room: 4, x: 0, z: -36.0, radius: 2.0,
+          label: 'Open Mentor Feedback Reflection Lectern',
+          action: () => {
+            sfx.click();
+            const fb = gameData.feedback;
+            openModal(
+              'ROOM 4 // MENTOR FEEDBACK REFLECTION',
+              'Professional Development Competition Reflection',
+              `<div class="space-y-2.5 text-xs">
+                <div><label class="font-bold text-amber-200 block mb-1">Feedback I Received:</label><textarea id="f-rec" rows="2" class="w-full p-2.5 rounded-xl bg-black/40 border border-purple-300/30 text-white">${fb.received}</textarea></div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div><label class="font-bold text-amber-200 block mb-1">Strengths Recognised:</label><textarea id="f-str" rows="2" class="w-full p-2.5 rounded-xl bg-black/40 border border-purple-300/30 text-white">${fb.strengths}</textarea></div>
+                  <div><label class="font-bold text-amber-200 block mb-1">Areas to Improve:</label><textarea id="f-imp" rows="2" class="w-full p-2.5 rounded-xl bg-black/40 border border-purple-300/30 text-white">${fb.improve}</textarea></div>
+                </div>
+                <div><label class="font-bold text-amber-200 block mb-1">What I Learned From Feedback:</label><textarea id="f-lrn" rows="2" class="w-full p-2.5 rounded-xl bg-black/40 border border-purple-300/30 text-white">${fb.learned}</textarea></div>
+                <div><label class="font-bold text-amber-200 block mb-1">Actions for Future Applications:</label><textarea id="f-act" rows="3" class="w-full p-2.5 rounded-xl bg-black/40 border border-purple-300/30 text-white">${fb.actions}</textarea></div>
+                <button id="btn-save-fb" class="btn-primary px-5 py-2.5 rounded-xl font-display font-bold text-sm cursor-pointer">Save Memory Record</button>
+              </div>`
+            );
+            document.getElementById('btn-save-fb')?.addEventListener('click', () => {
+              gameData.feedback = {
+                received: document.getElementById('f-rec').value,
+                strengths: document.getElementById('f-str').value,
+                improve: document.getElementById('f-imp').value,
+                learned: document.getElementById('f-lrn').value,
+                actions: document.getElementById('f-act').value
+              };
+              prog.r4FeedbackSaved = true; checkR4(); saveAll(); closeModal();
+              setSubtitle(prog.r4Solved ? 'Memory Fragment 4 (GROWTH) recovered! Door to Room 5 is open.' : 'Feedback saved! Now arrange the Growth Timeline in the Display Cabinet.');
+            });
+          }
+        },
+        {
+          id: 'door_4_5', room: 4, x: 0, z: -40.6, radius: 1.9,
+          label: () => (prog.door45Open ? 'Walk into Room 5: The Future' : 'Locked Door to Room 5'),
+          action: () => {
+            if (prog.door45Open) { character.root.position.set(0, 0, -43.8); setSubtitle('Entered Room 5: The Future — Sunlit Memory Hall.'); }
+            else { sfx.err(); setSubtitle('Complete both the Display Cabinet Timeline and Mentor Feedback Lectern first.'); }
+          }
+        },
+
+        // --- ROOM 5 ---
+        {
+          id: 'r5_pedestals', room: 5, x: 0, z: -49.2, radius: 2.8,
+          label: () => (prog.r5Solved ? 'Read Final Statement & Letter to Future Self' : 'Place 4 Memory Fragments on Pedestals'),
+          action: () => {
+            sfx.click();
+            const order = ['THE BEGINNING', 'CURIOSITY', 'BELONGING', 'GROWTH'];
+            const renderR5 = (msg = '') => {
+              if (prog.r5Solved) {
+                openModal(
+                  'THE KAMILIMU EFFECT',
+                  'Letter to My Future Self',
+                  `<div class="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 to-pink-500/20 border border-amber-400/50 text-center space-y-1">
+                    <p class="font-display font-bold text-base text-amber-200">BECAUSE OF KAMILIMU, I SEE MY POTENTIAL AND I AM ACTING ON IT.</p>
+                    <p class="font-display font-bold text-xs text-white">I SEE GROWTH. • I HAVE FOUND COMMUNITY. • I BELONG.</p>
+                  </div>
+                  <textarea id="r5-letter" rows="10" class="w-full p-3.5 rounded-2xl bg-black/40 border border-purple-300/30 text-xs sm:text-sm text-white leading-relaxed">${gameData.letter}</textarea>
+                  <button id="btn-r5-save" class="btn-primary px-5 py-2 rounded-xl font-display font-bold text-xs cursor-pointer">Save Letter</button>`
+                );
+                document.getElementById('btn-r5-save')?.addEventListener('click', () => {
+                  gameData.letter = document.getElementById('r5-letter').value; saveAll(); sfx.pickup();
+                });
+                return;
+              }
+              const rem = order.filter((s) => !prog.r5StarsPlaced.includes(s));
+              openModal(
+                'ROOM 5 // THE FUTURE',
+                'Unite Your Four Memory Fragments',
+                `<p class="text-xs text-purple-200">Place your four recovered fragments onto the pedestals in sequence:</p>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  ${[0, 1, 2, 3].map((i) => `<div class="p-3 rounded-xl border text-center ${prog.r5StarsPlaced[i] ? 'bg-amber-500/25 border-amber-400 font-bold text-amber-200' : 'bg-white/5 border-dashed border-purple-300/30 text-purple-400'}"><span class="block text-[10px]">PEDESTAL ${i + 1}</span><span class="text-xs mt-1 block">${prog.r5StarsPlaced[i] || 'Empty'}</span></div>`).join('')}
+                </div>
+                <div class="flex flex-wrap gap-2">${rem.map((s) => `<button data-ps="${s}" class="btn-primary px-3.5 py-2 rounded-xl font-display font-bold text-xs cursor-pointer">★ ${s}</button>`).join('')}</div>
+                ${msg ? `<p class="text-xs font-bold text-rose-300">${msg}</p>` : ''}`
+              );
+              modalBody.querySelectorAll('[data-ps]').forEach((b) => b.addEventListener('click', () => {
+                const s = b.getAttribute('data-ps');
+                if (s === order[prog.r5StarsPlaced.length]) {
+                  sfx.star();
+                  pedestalMeshes[prog.r5StarsPlaced.length].material.color.set('#fbbf24');
+                  prog.r5StarsPlaced.push(s);
+                  if (prog.r5StarsPlaced.length === 4) {
+                    sfx.win(); prog.r5Solved = true; saveAll(); updateHUD();
+                    setSubtitle('Because of KamiLimu, I see my potential and I am acting on it. I see growth. I have found community. I belong.');
+                  }
+                  renderR5();
+                } else {
+                  sfx.err(); renderR5(`Place "${order[prog.r5StarsPlaced.length]}" next.`);
+                }
+              }));
+            };
+            renderR5();
+          }
+        }
+      ];
+
+      function checkR4() {
+        if (prog.r4TimelineDone && prog.r4FeedbackSaved && !prog.r4Solved) {
+          sfx.star(); prog.r4Solved = true; prog.door45Open = true;
+          if (doorMeshes.door45Open) doorMeshes.door45Open.rotation.y = -Math.PI * 0.48;
+          saveAll(); updateHUD();
+        }
+      }
+
+      /**
+       * =======================================================================
+       * 7. HUD UPDATES, HINTS & CAMERA / MOVEMENT CONTROLS
+       * =======================================================================
+       */
+      const OBJECTIVES = {
+        1: () => prog.r1Solved ? 'Walk through the glowing crest door into Room 2.' : 'Explore the study room and find the memory fragments.',
+        2: () => prog.r2Solved ? 'Walk through the north door into Room 3: The People.' : 'Inspect the whiteboard & solve the Responsible Computing console.',
+        3: () => prog.r3Solved ? 'Walk through the north door into Room 4: The Growth Room.' : `Find all 6 community keepsakes (${prog.r3Clues.length}/6) and connect them at the round table.`,
+        4: () => prog.r4Solved ? 'Walk through the north door into Room 5: The Future.' : 'Inspect the podium, arrange the cabinet timeline & save your feedback reflection.',
+        5: () => prog.r5Solved ? 'All 5 fragments recovered! Inspect the pedestals to read your Letter.' : 'Walk to the 4 pedestals and unite your recovered memory fragments.'
+      };
+
+      const ROOM_NAMES = {
+        1: 'Room 1: The Beginning',
+        2: 'Room 2: The Awakening',
+        3: 'Room 3: The People',
+        4: 'Room 4: The Growth Room',
+        5: 'Room 5: The Future'
+      };
+
+      const HINTS = {
+        1: [
+          'Inspect the notebook on the laptop desk to find the 3-digit drawer code (104), and search the bookshelf.',
+          'Unlock the drawer on the front-right with 1-0-4 to collect the Brass Lab Key and the final two sentence slips.',
+          'Return to the laptop desk and arrange the slips: "I thought" → "technology" → "wasn\'t meant" → "for me."'
+        ],
+        2: [
+          'Walk up to the central lab computer console and press E.',
+          'In Question 1, choose B ("Why did we choose this approach instead of another?").',
+          'In Question 2, select Offline-Resilient Local Storage to weigh accessibility vs. sync complexity.'
+        ],
+        3: [
+          'Walk around all six side tables in the library and press E to collect every community keepsake.',
+          'Once all 6 keepsakes are found, interact with the central round table to restore the network.'
+        ],
+        4: [
+          'Inspect the Speaking Podium on the front-right to collect the Silver Cabinet Key.',
+          'Unlock the Display Cabinet to arrange your growth timeline, and save your reflection at the center lectern.'
+        ],
+        5: [
+          'Walk up to the four glowing pedestals at the north end of the hall.',
+          'Place the fragments in order: THE BEGINNING → CURIOSITY → BELONGING → GROWTH.'
+        ]
+      };
+
+      function getCurrentRoomId(z) {
+        if (z > -6.0) return 1;
+        if (z > -18.0) return 2;
+        if (z > -30.0) return 3;
+        if (z > -42.0) return 4;
+        return 5;
+      }
+
+      let currentRoomId = 1;
+      let activeInteractable = null;
+
+      function updateHUD() {
+        const count = [prog.r1Solved, prog.r2Solved, prog.r3Solved, prog.r4Solved, prog.r5Solved].filter(Boolean).length;
+        document.getElementById('hud-fragment-count').textContent = `${count} / 5`;
+        document.getElementById('hud-room-label').textContent = `Room ${currentRoomId} • Current Objective:`;
+        document.getElementById('hud-objective-text').textContent = OBJECTIVES[currentRoomId]();
+        document.getElementById('hud-inv-count').textContent = `${prog.inventory.length} item${prog.inventory.length === 1 ? '' : 's'}`;
+      }
+
+      const keys = { w: false, a: false, s: false, d: false, shift: false };
+      let camYaw = 0;
+      let isDragging = false;
+      let prevMouseX = 0;
+      let paused = false;
+
+      renderer.domElement.addEventListener('pointerdown', (e) => {
+        if (!prog.started || modalActive || paused) return;
+        isDragging = true;
+        prevMouseX = e.clientX;
+      });
+      window.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        camYaw -= (e.clientX - prevMouseX) * 0.0065;
+        prevMouseX = e.clientX;
+      });
+      window.addEventListener('pointerup', () => { isDragging = false; });
+
+      window.addEventListener('keydown', (e) => {
+        if (modalActive || paused) {
+          if (e.key === 'Escape') { closeModal(); setPaused(false); }
+          return;
+        }
+        const k = e.key.toLowerCase();
+        if (k === 'w' || e.key === 'ArrowUp') keys.w = true;
+        if (k === 's' || e.key === 'ArrowDown') keys.s = true;
+        if (k === 'a' || e.key === 'ArrowLeft') keys.a = true;
+        if (k === 'd' || e.key === 'ArrowRight') keys.d = true;
+        if (k === 'shift') keys.shift = true;
+        if ((k === 'e' || e.key === ' ') && activeInteractable && prog.started) {
+          e.preventDefault();
+          activeInteractable.action();
+        }
+        if (k === 'h' && prog.started) showNextHint();
+        if (e.key === 'Escape' && prog.started) setPaused(true);
+      });
+
+      window.addEventListener('keyup', (e) => {
+        const k = e.key.toLowerCase();
+        if (k === 'w' || e.key === 'ArrowUp') keys.w = false;
+        if (k === 's' || e.key === 'ArrowDown') keys.s = false;
+        if (k === 'a' || e.key === 'ArrowLeft') keys.a = false;
+        if (k === 'd' || e.key === 'ArrowRight') keys.d = false;
+        if (k === 'shift') keys.shift = false;
+      });
+
+      function showNextHint() {
+        sfx.click();
+        const list = HINTS[currentRoomId];
+        const i = Math.min(prog.hintIdx[currentRoomId] || 0, list.length - 1);
+        prog.hintIdx[currentRoomId] = i + 1;
+        saveAll();
+        setSubtitle(`Clue: ${list[i]}`);
+      }
+
+      function setPaused(val) {
+        paused = val;
+        const p = document.getElementById('pause-modal');
+        if (val) { p.classList.remove('hidden'); p.classList.add('flex'); }
+        else { p.classList.add('hidden'); p.classList.remove('flex'); }
+      }
+
+      function canStepTo(nx, nz) {
+        // Room bounds + wide seamless doorway corridors
+        const inRoom = (zMin, zMax) => nx >= -4.7 && nx <= 4.7 && nz >= zMin && nz <= zMax;
+        const inDoor = (doorZ, openKey) => prog[openKey] && Math.abs(nx) <= 0.92 && Math.abs(nz - doorZ) <= 3.1;
+        const inside =
+          inRoom(-4.5, 4.5) ||
+          inRoom(-16.5, -7.5) ||
+          inRoom(-28.5, -19.5) ||
+          inRoom(-40.5, -31.5) ||
+          inRoom(-52.2, -43.5) ||
+          inDoor(-5, 'door12Open') ||
+          inDoor(-17, 'door23Open') ||
+          inDoor(-29, 'door34Open') ||
+          inDoor(-41, 'door45Open');
+        if (!inside) return false;
+        for (const c of colliders) {
+          if (Math.hypot(nx - c.x, nz - c.z) < c.r) return false;
+        }
+        return true;
+      }
+
+      // UI Button Wiring
+      document.getElementById('btn-start-game').addEventListener('click', () => {
+        sfx.click();
+        prog.started = true;
+        saveAll();
+        document.getElementById('title-overlay').classList.add('hidden');
+        document.getElementById('game-hud').classList.remove('hidden');
+        document.getElementById('game-hud').classList.add('flex');
+        updateHUD();
+        setSubtitle('You wake up in a warm, sunlit room. Walk around the desk, bookshelf, and pinboard to uncover what is hidden here.', 4500);
+      });
+
+      document.getElementById('btn-title-photos').addEventListener('click', openPhotoManagerModal);
+      document.getElementById('btn-pause-photos').addEventListener('click', () => { setPaused(false); openPhotoManagerModal(); });
+      document.getElementById('btn-pause-export').addEventListener('click', () => {
+        sfx.pickup();
+        const serializedData = JSON.stringify(gameData, null, 2);
+        const rawHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+        const bakedHtml = rawHtml.replace(
+          /const DEFAULT_DATA = \{[\s\S]*?\n      \};/,
+          `const DEFAULT_DATA = ${serializedData};`
+        );
+        const blob = new Blob([bakedHtml], { type: 'text/html;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'index.html';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+        setPaused(false);
+        setSubtitle('Exported index.html with all photos & edits baked in—ready to upload to GitHub!', 6000);
+      });
+      document.getElementById('btn-hud-hint').addEventListener('click', showNextHint);
+      document.getElementById('btn-interact').addEventListener('click', () => activeInteractable && activeInteractable.action());
+      document.getElementById('btn-hud-pause').addEventListener('click', () => setPaused(true));
+      document.getElementById('btn-resume-top').addEventListener('click', () => setPaused(false));
+      document.getElementById('btn-resume-main').addEventListener('click', () => setPaused(false));
+
+      document.getElementById('btn-inventory').addEventListener('click', () => {
+        sfx.click();
+        openModal(
+          'BACKPACK',
+          'Collected Items',
+          prog.inventory.length
+            ? `<div class="space-y-2">${prog.inventory.map((i) => `<div class="p-3 rounded-xl bg-white/10 border border-amber-300/30"><strong class="text-amber-300">🔑 ${i.name}</strong><p class="text-xs text-purple-200 mt-0.5">${i.desc}</p></div>`).join('')}</div>`
+            : '<p class="text-purple-300">Your backpack is currently empty. Search desks, drawers, and podiums for keys!</p>'
+        );
+      });
+
+      document.getElementById('btn-pause-sound').addEventListener('click', (e) => {
+        sfx.enabled = !sfx.enabled;
+        e.target.textContent = sfx.enabled ? 'Audio: Enabled' : 'Audio: Muted';
+      });
+
+      document.querySelectorAll('[data-jump]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const r = Number(btn.getAttribute('data-jump'));
+          const zSpawns = { 1: 2.2, 2: -8.5, 3: -20.5, 4: -32.5, 5: -44.5 };
+          if (r >= 2) { prog.r1Solved = true; prog.door12Open = true; if (doorMeshes.door12Open) doorMeshes.door12Open.rotation.y = -Math.PI * 0.48; }
+          if (r >= 3) { prog.r2Solved = true; prog.door23Open = true; if (doorMeshes.door23Open) doorMeshes.door23Open.rotation.y = -Math.PI * 0.48; }
+          if (r >= 4) { prog.r3Solved = true; prog.door34Open = true; if (doorMeshes.door34Open) doorMeshes.door34Open.rotation.y = -Math.PI * 0.48; }
+          if (r >= 5) { prog.r4Solved = true; prog.door45Open = true; if (doorMeshes.door45Open) doorMeshes.door45Open.rotation.y = -Math.PI * 0.48; }
+          character.root.position.set(0, 0, zSpawns[r]);
+          currentRoomId = r;
+          saveAll(); setPaused(false); updateHUD();
+        });
+      });
+
+      document.getElementById('btn-pause-restart').addEventListener('click', () => {
+        localStorage.removeItem(STORAGE_KEY + '_prog');
+        window.location.reload();
+      });
+
+      if (prog.started) {
+        document.getElementById('title-overlay').classList.add('hidden');
+        document.getElementById('game-hud').classList.remove('hidden');
+        document.getElementById('game-hud').classList.add('flex');
+        hideSubtitle();
+        updateHUD();
+      }
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      /**
+       * =======================================================================
+       * 8. MAIN 60FPS 3D ANIMATION & CHARACTER CONTROLLER LOOP
+       * =======================================================================
+       */
+      const clock = new THREE.Clock();
+      let walkTime = 0;
+
+      function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.05);
+        const elapsed = clock.getElapsedTime();
+
+        const pos = character.root.position;
+        let moving = false;
+        const sprinting = keys.shift;
+
+        if (prog.started && !paused && !modalActive) {
+          let moveForward = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+          let moveRight = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+
+          if (moveForward !== 0 || moveRight !== 0) {
+            moving = true;
+            hideSubtitle();
+            const speed = sprinting ? 6.2 : 4.1;
+            const sinY = Math.sin(camYaw);
+            const cosY = Math.cos(camYaw);
+            const vx = (-sinY * moveForward + cosY * moveRight);
+            const vz = (-cosY * moveForward - sinY * moveRight);
+            const len = Math.hypot(vx, vz) || 1;
+            const dx = (vx / len) * speed * dt;
+            const dz = (vz / len) * speed * dt;
+
+            if (canStepTo(pos.x + dx, pos.z)) pos.x += dx;
+            if (canStepTo(pos.x, pos.z + dz)) pos.z += dz;
+
+            const targetYaw = Math.atan2(dx, dz);
+            let diff = targetYaw - character.root.rotation.y;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            character.root.rotation.y += diff * Math.min(1, dt * 12);
+          }
+        }
+
+        // Character Idle, Walk, Sprint & Braid Sway Animations
+        if (moving) {
+          walkTime += dt * (sprinting ? 14 : 9.5);
+          const swing = Math.sin(walkTime) * (sprinting ? 0.65 : 0.45);
+          character.leftLeg.rotation.x = swing;
+          character.rightLeg.rotation.x = -swing;
+          character.leftArm.rotation.x = -swing * 0.75;
+          character.rightArm.rotation.x = swing * 0.75;
+          character.torsoGroup.position.y = 1.11 + Math.abs(Math.cos(walkTime)) * 0.035;
+          character.braidStrands.forEach((b) => {
+            b.group.rotation.z = Math.sin(walkTime + b.phase) * 0.07;
+            b.group.rotation.x = 0.08 + Math.cos(walkTime + b.phase) * 0.05;
+          });
+        } else {
+          character.leftLeg.rotation.x *= 0.82;
+          character.rightLeg.rotation.x *= 0.82;
+          character.leftArm.rotation.x *= 0.82;
+          character.rightArm.rotation.x *= 0.82;
+          character.torsoGroup.position.y = 1.11 + Math.sin(elapsed * 2.4) * 0.012;
+          character.braidStrands.forEach((b) => {
+            b.group.rotation.z = Math.sin(elapsed * 1.6 + b.phase) * 0.025;
+            b.group.rotation.x *= 0.85;
+          });
+        }
+
+        // Smooth door swing animation
+        Object.keys(doorMeshes).forEach((key) => {
+          const pivot = doorMeshes[key];
+          if (!pivot) return;
+          const targetRot = prog[key] ? -Math.PI * 0.52 : 0;
+          pivot.rotation.y += (targetRot - pivot.rotation.y) * Math.min(1, dt * 7);
+        });
+
+        // Room detection & subtle room arrival banner
+        const rNow = getCurrentRoomId(pos.z);
+        if (rNow !== currentRoomId) {
+          currentRoomId = rNow;
+          updateHUD();
+          if (prog.started) {
+            setSubtitle(`Entered ${ROOM_NAMES[rNow]}`, 2600);
+          }
+        }
+
+        // Nearest interactable prompt (hide door lock prompts once unlocked so walking through is uninterrupted)
+        let best = null;
+        let bestDist = Infinity;
+        for (const obj of INTERACTABLES) {
+          if (obj.room !== currentRoomId) continue;
+          if (obj.hiddenWhenOpen && prog[obj.hiddenWhenOpen]) continue;
+          const dist = Math.hypot(pos.x - obj.x, pos.z - obj.z);
+          if (dist <= obj.radius && dist < bestDist) {
+            bestDist = dist;
+            best = obj;
+          }
+        }
+        activeInteractable = best;
+        const promptEl = document.getElementById('interact-prompt');
+        if (activeInteractable && prog.started && !paused && !modalActive) {
+          document.getElementById('interact-prompt-label').textContent =
+            typeof activeInteractable.label === 'function' ? activeInteractable.label() : activeInteractable.label;
+          promptEl.classList.remove('hidden');
+        } else {
+          promptEl.classList.add('hidden');
+        }
+
+        // Camera Framing (Cinematic showcase orbit on title screen; smooth follow during gameplay)
+        if (!prog.started) {
+          const orbitAngle = Math.sin(elapsed * 0.35) * 0.42;
+          camera.position.set(
+            pos.x + Math.sin(orbitAngle) * 4.2,
+            2.35,
+            pos.z + Math.cos(orbitAngle) * 4.2
+          );
+          camera.lookAt(pos.x, 1.35, pos.z - 1.2);
+        } else {
+          // Slightly tighten camera distance inside doorways so the player stays clearly framed
+          const inCorridor =
+            Math.abs(pos.z + 5) < 2.2 ||
+            Math.abs(pos.z + 17) < 2.2 ||
+            Math.abs(pos.z + 29) < 2.2 ||
+            Math.abs(pos.z + 41) < 2.2;
+          const camDist = inCorridor ? 3.5 : 4.5;
+          const camHeight = inCorridor ? 2.45 : 2.85;
+          const desiredCamX = pos.x + Math.sin(camYaw) * camDist;
+          const desiredCamZ = pos.z + Math.cos(camYaw) * camDist;
+          camera.position.x += (desiredCamX - camera.position.x) * 0.12;
+          camera.position.y += (camHeight - camera.position.y) * 0.12;
+          camera.position.z += (desiredCamZ - camera.position.z) * 0.12;
+          camera.lookAt(pos.x, 1.35, pos.z - 0.8);
+
+          // Automatically fade any north wall sitting between the camera and the character
+          Object.values(roomNorthWalls).forEach((wall) => {
+            const wallBlocksView =
+              (camera.position.z > wall.doorZ && pos.z < wall.doorZ + 0.8) ||
+              (camera.position.z < wall.doorZ && pos.z > wall.doorZ - 0.8);
+            const targetOpacity = wallBlocksView ? 0.16 : 1.0;
+            wall.meshes.forEach((m) => {
+              m.material.opacity += (targetOpacity - m.material.opacity) * Math.min(1, dt * 10);
+            });
+          });
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      animate();
+    })();
+  </script>
+</body>
+</html>
